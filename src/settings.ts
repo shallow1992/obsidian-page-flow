@@ -1,10 +1,12 @@
 import { App, Platform, PluginSettingTab, Setting } from "obsidian";
 import type PageFlowPlugin from "./main";
-import { PageFlowSettings, SortOrder } from "./types";
+import { EasingStyle, PageFlowSettings, SortOrder } from "./types";
 
 export const DEFAULT_SETTINGS: PageFlowSettings = {
   scrollPercentage: 85,
   smoothScroll: true,
+  scrollDuration: 280,
+  easingStyle: "ease-in-out",
   sortOrder: "name-asc",
   loopFolder: false,
   thresholdPx: 10,
@@ -91,6 +93,40 @@ export class PageFlowSettingTab extends PluginSettingTab {
           .setValue(this.plugin.settings.smoothScroll)
           .onChange(async (value) => {
             this.plugin.settings.smoothScroll = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Scroll animation duration (ms)")
+      .setDesc(
+        "Duration of the smooth scroll animation in milliseconds (default: 280ms). Lower values feel snappier; higher values feel gentler."
+      )
+      .addSlider((slider) =>
+        slider
+          .setLimits(100, 600, 20)
+          .setValue(this.plugin.settings.scrollDuration)
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            this.plugin.settings.scrollDuration = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Scroll animation easing")
+      .setDesc(
+        "Acceleration and deceleration curve for smooth scrolling. Ease In-Out eliminates initial jerk for the smoothest reading feel."
+      )
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("ease-in-out", "Ease In-Out (Smoothest, balanced)")
+          .addOption("ease-out", "Ease Out (Fast start, original)")
+          .addOption("ease-out-gentle", "Ease Out Gentle (Soft start)")
+          .addOption("linear", "Linear (Constant speed)")
+          .setValue(this.plugin.settings.easingStyle)
+          .onChange(async (value) => {
+            this.plugin.settings.easingStyle = value as EasingStyle;
             await this.plugin.saveSettings();
           })
       );

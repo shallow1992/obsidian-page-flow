@@ -3,7 +3,11 @@ import {
   calculateScrollDelta,
   checkIsAtBottom,
   checkIsAtTop,
+  easeInOutCubic,
   easeOutCubic,
+  easeOutQuad,
+  getEasingFunction,
+  linear,
 } from "../src/scroller";
 
 describe("Scroller calculation logic", () => {
@@ -55,14 +59,67 @@ describe("Scroller calculation logic", () => {
     });
   });
 
-  describe("easeOutCubic", () => {
-    it("returns 0 at progress 0 and 1 at progress 1", () => {
-      expect(easeOutCubic(0)).toBe(0);
-      expect(easeOutCubic(1)).toBe(1);
+  describe("Easing functions", () => {
+    describe("easeOutCubic", () => {
+      it("returns 0 at progress 0 and 1 at progress 1", () => {
+        expect(easeOutCubic(0)).toBe(0);
+        expect(easeOutCubic(1)).toBe(1);
+      });
+
+      it("has rapid deceleration physics (progress 0.5 yields 0.875)", () => {
+        expect(easeOutCubic(0.5)).toBe(0.875);
+      });
     });
 
-    it("has deceleration physics (progress 0.5 yields 0.875)", () => {
-      expect(easeOutCubic(0.5)).toBe(0.875);
+    describe("easeOutQuad", () => {
+      it("returns 0 at progress 0 and 1 at progress 1", () => {
+        expect(easeOutQuad(0)).toBe(0);
+        expect(easeOutQuad(1)).toBe(1);
+      });
+
+      it("has gentle deceleration physics (progress 0.5 yields 0.75)", () => {
+        expect(easeOutQuad(0.5)).toBe(0.75);
+      });
+    });
+
+    describe("easeInOutCubic", () => {
+      it("returns 0 at progress 0 and 1 at progress 1", () => {
+        expect(easeInOutCubic(0)).toBe(0);
+        expect(easeInOutCubic(1)).toBe(1);
+      });
+
+      it("is symmetric at the midpoint (progress 0.5 yields 0.5)", () => {
+        expect(easeInOutCubic(0.5)).toBe(0.5);
+      });
+
+      it("accelerates smoothly in the first half (progress 0.25 yields 0.0625)", () => {
+        expect(easeInOutCubic(0.25)).toBe(0.0625);
+      });
+
+      it("decelerates smoothly in the second half (progress 0.75 yields 0.9375)", () => {
+        expect(easeInOutCubic(0.75)).toBe(0.9375);
+      });
+    });
+
+    describe("linear", () => {
+      it("returns input progress value identically", () => {
+        expect(linear(0)).toBe(0);
+        expect(linear(0.5)).toBe(0.5);
+        expect(linear(1)).toBe(1);
+      });
+    });
+
+    describe("getEasingFunction", () => {
+      it("maps easing style identifiers to correct functions", () => {
+        expect(getEasingFunction("ease-in-out")).toBe(easeInOutCubic);
+        expect(getEasingFunction("ease-out")).toBe(easeOutCubic);
+        expect(getEasingFunction("ease-out-gentle")).toBe(easeOutQuad);
+        expect(getEasingFunction("linear")).toBe(linear);
+      });
+
+      it("defaults to easeOutCubic on unknown style", () => {
+        expect(getEasingFunction("unknown" as any)).toBe(easeOutCubic);
+      });
     });
   });
 });

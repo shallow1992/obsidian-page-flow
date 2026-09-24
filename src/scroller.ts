@@ -1,4 +1,5 @@
 import { MarkdownView } from "obsidian";
+import { EasingStyle } from "./types";
 
 /**
  * Pure calculation helper: checks whether the container scroll is at the bottom.
@@ -32,10 +33,51 @@ export function calculateScrollDelta(clientHeight: number, percentage: number): 
 
 /**
  * Pure easing function: easeOutCubic.
- * Natural, smooth deceleration curve matching comfortable browser physics.
+ * Rapid start with deceleration.
  */
 export function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);
+}
+
+/**
+ * Pure easing function: easeOutQuad.
+ * Gentle deceleration with moderate initial velocity.
+ */
+export function easeOutQuad(t: number): number {
+  return 1 - (1 - t) * (1 - t);
+}
+
+/**
+ * Pure easing function: easeInOutCubic.
+ * Smooth acceleration and deceleration for minimum visual stutter.
+ */
+export function easeInOutCubic(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+/**
+ * Pure easing function: linear.
+ * Constant velocity across the animation.
+ */
+export function linear(t: number): number {
+  return t;
+}
+
+/**
+ * Returns the corresponding easing function for the specified style.
+ */
+export function getEasingFunction(style: EasingStyle): (t: number) => number {
+  switch (style) {
+    case "ease-in-out":
+      return easeInOutCubic;
+    case "ease-out-gentle":
+      return easeOutQuad;
+    case "linear":
+      return linear;
+    case "ease-out":
+    default:
+      return easeOutCubic;
+  }
 }
 
 interface ActiveScrollAnimation {
@@ -56,7 +98,8 @@ const activeAnimations = new WeakMap<HTMLElement, ActiveScrollAnimation>();
 export function smoothScrollBy(
   container: HTMLElement,
   delta: number,
-  duration = 280
+  duration = 280,
+  easingStyle: EasingStyle = "ease-in-out"
 ): void {
   const clientHeight = container.clientHeight;
   const maxScroll = Math.max(0, container.scrollHeight - clientHeight);
@@ -93,11 +136,12 @@ export function smoothScrollBy(
   }
 
   const startTime = typeof performance !== "undefined" ? performance.now() : Date.now();
+  const easingFn = getEasingFunction(easingStyle);
 
   const step = (now: number) => {
     const elapsed = now - startTime;
     const progress = Math.min(1, elapsed / duration);
-    const eased = easeOutCubic(progress);
+    const eased = easingFn(progress);
 
     container.scrollTop = startScrollTop + distance * eased;
 
@@ -162,7 +206,9 @@ export function scrollDown(
   container: HTMLElement,
   percentage: number,
   smooth: boolean,
-  threshold = 10
+  threshold = 10,
+  duration = 280,
+  easingStyle: EasingStyle = "ease-in-out"
 ): boolean {
   const existing = activeAnimations.get(container);
   const currentOrTargetScrollTop = existing ? existing.targetScrollTop : container.scrollTop;
@@ -176,7 +222,7 @@ export function scrollDown(
   const delta = calculateScrollDelta(clientHeight, percentage);
 
   if (smooth) {
-    smoothScrollBy(container, delta, 280);
+    smoothScrollBy(container, delta, duration, easingStyle);
   } else {
     container.scrollTop = Math.min(
       scrollHeight - clientHeight,
@@ -194,7 +240,9 @@ export function scrollUp(
   container: HTMLElement,
   percentage: number,
   smooth: boolean,
-  threshold = 10
+  threshold = 10,
+  duration = 280,
+  easingStyle: EasingStyle = "ease-in-out"
 ): boolean {
   const existing = activeAnimations.get(container);
   const currentOrTargetScrollTop = existing ? existing.targetScrollTop : container.scrollTop;
@@ -207,7 +255,7 @@ export function scrollUp(
   const delta = calculateScrollDelta(clientHeight, percentage);
 
   if (smooth) {
-    smoothScrollBy(container, -delta, 280);
+    smoothScrollBy(container, -delta, duration, easingStyle);
   } else {
     container.scrollTop = Math.max(0, container.scrollTop - delta);
   }
@@ -218,7 +266,12 @@ export function scrollUp(
 /**
  * Immediately scrolls the container to the top.
  */
-export function scrollToTop(container: HTMLElement, smooth = false): void {
+export function scrollToTop(
+  container: HTMLElement,
+  smooth = false,
+  duration = 280,
+  easingStyle: EasingStyle = "ease-in-out"
+): void {
   const existing = activeAnimations.get(container);
   if (existing) {
     cancelAnimationFrame(existing.frameId);
@@ -226,7 +279,7 @@ export function scrollToTop(container: HTMLElement, smooth = false): void {
   }
 
   if (smooth) {
-    smoothScrollBy(container, -container.scrollTop, 280);
+    smoothScrollBy(container, -container.scrollTop, duration, easingStyle);
   } else {
     container.scrollTop = 0;
   }
@@ -235,7 +288,12 @@ export function scrollToTop(container: HTMLElement, smooth = false): void {
 /**
  * Immediately scrolls the container to the bottom.
  */
-export function scrollToBottom(container: HTMLElement, smooth = false): void {
+export function scrollToBottom(
+  container: HTMLElement,
+  smooth = false,
+  duration = 280,
+  easingStyle: EasingStyle = "ease-in-out"
+): void {
   const existing = activeAnimations.get(container);
   if (existing) {
     cancelAnimationFrame(existing.frameId);
@@ -244,7 +302,7 @@ export function scrollToBottom(container: HTMLElement, smooth = false): void {
 
   const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
   if (smooth) {
-    smoothScrollBy(container, maxScroll - container.scrollTop, 280);
+    smoothScrollBy(container, maxScroll - container.scrollTop, duration, easingStyle);
   } else {
     container.scrollTop = container.scrollHeight;
   }
