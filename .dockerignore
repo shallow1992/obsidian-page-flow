@@ -1,0 +1,4 @@
+node_modules
+.git
+main.js
+.DS_Store

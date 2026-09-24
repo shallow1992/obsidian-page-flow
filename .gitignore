@@ -1,0 +1,21 @@
+# Obsidian build outputs
+main.js
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test coverage
+coverage/
+
+# OS and IDE files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local build artifacts
+data.json

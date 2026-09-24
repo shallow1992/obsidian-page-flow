@@ -1,0 +1,44 @@
+{
+  "name": "obsidian-page-flow",
+  "version": "0.1.0",
+  "description": "Effortless note reading and triage in Obsidian. Scroll page-by-page and seamlessly transition to the next file with single hotkeys.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "version": "node version-bump.mjs"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-md",
+    "obsidian-plugin",
+    "pager",
+    "reading",
+    "navigation",
+    "triage",
+    "page-turner"
+  ],
+  "author": "shallow1992",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shallow1992/obsidian-page-flow.git"
+  },
+  "bugs": {
+    "url": "https://github.com/shallow1992/obsidian-page-flow/issues"
+  },
+  "homepage": "https://github.com/shallow1992/obsidian-page-flow#readme",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "builtin-modules": "^3.3.0",
+    "esbuild": "^0.28.2",
+    "obsidian": "latest",
+    "tslib": "^2.6.0",
+    "typescript": "^5.4.0",
+    "vite": "^6.4.3",
+    "vitest": "^4.1.11"
+  }
+}

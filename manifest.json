@@ -1,0 +1,10 @@
+{
+	"id": "page-flow",
+	"name": "Page Flow",
+	"version": "0.1.0",
+	"minAppVersion": "1.4.0",
+	"description": "Scroll notes page-by-page and transition to the next file with single hotkeys.",
+	"author": "shallow1992",
+	"authorUrl": "https://github.com/shallow1992",
+	"isDesktopOnly": false
+}
