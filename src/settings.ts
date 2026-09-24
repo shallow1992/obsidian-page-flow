@@ -8,6 +8,7 @@ export const DEFAULT_SETTINGS: PageFlowSettings = {
   sortOrder: "name-asc",
   loopFolder: false,
   thresholdPx: 10,
+  debugLogging: true,
 };
 
 export class PageFlowSettingTab extends PluginSettingTab {
@@ -90,6 +91,18 @@ export class PageFlowSettingTab extends PluginSettingTab {
           .setDynamicTooltip()
           .onChange(async (value) => {
             this.plugin.settings.thresholdPx = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("Debug logging")
+      .setDesc("Output detailed scroll diagnostics to the developer console (Cmd + Option + I).")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.debugLogging)
+          .onChange(async (value) => {
+            this.plugin.settings.debugLogging = value;
             await this.plugin.saveSettings();
           })
       );

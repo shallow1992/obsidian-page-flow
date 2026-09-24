@@ -9,7 +9,6 @@ export function checkIsAtBottom(
   scrollHeight: number,
   threshold = 10
 ): boolean {
-  // If the content is smaller than or equal to client height, it's considered at the bottom
   if (scrollHeight <= clientHeight) {
     return true;
   }
@@ -32,70 +31,15 @@ export function calculateScrollDelta(clientHeight: number, percentage: number): 
 }
 
 /**
- * Pure easing function: easeOutCubic.
- * Starts fast and decelerates smoothly to an instant, gentle stop.
+ * Helper to log debug messages with [PageFlow] prefix if debug mode is active.
  */
-export function easeOutCubic(t: number): number {
-  return 1 - Math.pow(1 - t, 3);
-}
-
-interface ActiveScrollAnimation {
-  targetScrollTop: number;
-  frameId: number;
-}
-
-const activeAnimations = new WeakMap<HTMLElement, ActiveScrollAnimation>();
-
-/**
- * Custom smooth scroll using requestAnimationFrame and easeOutCubic.
- * Resolves rapidly (~130ms) to avoid CodeMirror 6 height-measurement jitter.
- * Queues up target positions if triggered multiple times consecutively.
- */
-export function smoothScrollTo(
-  container: HTMLElement,
-  delta: number,
-  duration = 130
-): void {
-  const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
-  const existing = activeAnimations.get(container);
-
-  // If already animating, smoothly chain from the existing target position
-  const basePosition = existing ? existing.targetScrollTop : container.scrollTop;
-  const targetScrollTop = Math.max(0, Math.min(maxScroll, basePosition + delta));
-
-  if (existing) {
-    cancelAnimationFrame(existing.frameId);
+export function logDebug(enabled: boolean, message: string, data?: any): void {
+  if (!enabled) return;
+  if (data !== undefined) {
+    console.log(`[PageFlow] ${message}`, data);
+  } else {
+    console.log(`[PageFlow] ${message}`);
   }
-
-  const startPosition = container.scrollTop;
-  const distance = targetScrollTop - startPosition;
-
-  if (Math.abs(distance) < 1) {
-    container.scrollTop = targetScrollTop;
-    activeAnimations.delete(container);
-    return;
-  }
-
-  const startTime = typeof performance !== "undefined" ? performance.now() : Date.now();
-
-  const step = (now: number) => {
-    const elapsed = now - startTime;
-    const progress = Math.min(1, elapsed / duration);
-    const eased = easeOutCubic(progress);
-
-    container.scrollTop = startPosition + distance * eased;
-
-    if (progress < 1) {
-      const frameId = requestAnimationFrame(step);
-      activeAnimations.set(container, { targetScrollTop, frameId });
-    } else {
-      container.scrollTop = targetScrollTop;
-      activeAnimations.delete(container);
-    }
-  };
-
-  const frameId = requestAnimationFrame(step);
-  activeAnimations.set(container, { targetScrollTop, frameId });
 }
 
 /**
@@ -126,59 +70,126 @@ export function getScrollContainer(view: MarkdownView): HTMLElement | null {
 }
 
 /**
- * Scrolls the container downward by the configured percentage.
- * Returns true if scrolled, or false if already at the bottom.
+ * Scrolls the container downward by the configured percentage using native smooth scrolling.
+ * Emits diagnostics to trace CodeMirror 6 virtual layout shifts and scrollbar movements.
  */
 export function scrollDown(
   container: HTMLElement,
   percentage: number,
   smooth: boolean,
-  threshold = 10
+  threshold = 10,
+  debug = false
 ): boolean {
-  const existing = activeAnimations.get(container);
-  const currentOrTargetScrollTop = existing ? existing.targetScrollTop : container.scrollTop;
+  const beforeScrollTop = container.scrollTop;
+  const clientHeight = container.clientHeight;
+  const beforeScrollHeight = container.scrollHeight;
 
-  if (checkIsAtBottom(currentOrTargetScrollTop, container.clientHeight, container.scrollHeight, threshold)) {
+  if (checkIsAtBottom(beforeScrollTop, clientHeight, beforeScrollHeight, threshold)) {
+    logDebug(debug, "scrollDown: Already at bottom -> triggering next file", {
+      scrollTop: beforeScrollTop,
+      clientHeight,
+      scrollHeight: beforeScrollHeight,
+      threshold,
+    });
     return false;
   }
 
-  const delta = calculateScrollDelta(container.clientHeight, percentage);
+  const delta = calculateScrollDelta(clientHeight, percentage);
 
-  if (smooth) {
-    smoothScrollTo(container, delta);
-  } else {
-    container.scrollTop = Math.min(
-      container.scrollHeight - container.clientHeight,
-      container.scrollTop + delta
-    );
+  logDebug(debug, "scrollDown: Executing scroll", {
+    beforeScrollTop,
+    clientHeight,
+    beforeScrollHeight,
+    delta,
+    behavior: smooth ? "smooth" : "auto",
+  });
+
+  container.scrollBy({
+    top: delta,
+    behavior: smooth ? "smooth" : "auto",
+  });
+
+  // Track CodeMirror layout shift after smooth animation completes
+  if (debug && smooth) {
+    window.setTimeout(() => {
+      const afterScrollTop = container.scrollTop;
+      const afterScrollHeight = container.scrollHeight;
+      const heightShift = afterScrollHeight - beforeScrollHeight;
+
+      logDebug(debug, "scrollDown: Completed", {
+        afterScrollTop,
+        afterScrollHeight,
+        heightShift: `${heightShift > 0 ? "+" : ""}${heightShift}px`,
+      });
+
+      if (heightShift !== 0) {
+        logDebug(
+          debug,
+          `⚠️ CodeMirror height shifted by ${heightShift > 0 ? "+" : ""}${heightShift}px during scroll. This height correction causes the scrollbar thumb to adjust dynamically.`
+        );
+      }
+    }, 450);
   }
 
   return true;
 }
 
 /**
- * Scrolls the container upward by the configured percentage.
- * Returns true if scrolled, or false if already at the top.
+ * Scrolls the container upward by the configured percentage using native smooth scrolling.
  */
 export function scrollUp(
   container: HTMLElement,
   percentage: number,
   smooth: boolean,
-  threshold = 10
+  threshold = 10,
+  debug = false
 ): boolean {
-  const existing = activeAnimations.get(container);
-  const currentOrTargetScrollTop = existing ? existing.targetScrollTop : container.scrollTop;
+  const beforeScrollTop = container.scrollTop;
+  const clientHeight = container.clientHeight;
+  const beforeScrollHeight = container.scrollHeight;
 
-  if (checkIsAtTop(currentOrTargetScrollTop, threshold)) {
+  if (checkIsAtTop(beforeScrollTop, threshold)) {
+    logDebug(debug, "scrollUp: Already at top -> triggering previous file", {
+      scrollTop: beforeScrollTop,
+      threshold,
+    });
     return false;
   }
 
-  const delta = calculateScrollDelta(container.clientHeight, percentage);
+  const delta = calculateScrollDelta(clientHeight, percentage);
 
-  if (smooth) {
-    smoothScrollTo(container, -delta);
-  } else {
-    container.scrollTop = Math.max(0, container.scrollTop - delta);
+  logDebug(debug, "scrollUp: Executing scroll", {
+    beforeScrollTop,
+    clientHeight,
+    beforeScrollHeight,
+    delta,
+    behavior: smooth ? "smooth" : "auto",
+  });
+
+  container.scrollBy({
+    top: -delta,
+    behavior: smooth ? "smooth" : "auto",
+  });
+
+  if (debug && smooth) {
+    window.setTimeout(() => {
+      const afterScrollTop = container.scrollTop;
+      const afterScrollHeight = container.scrollHeight;
+      const heightShift = afterScrollHeight - beforeScrollHeight;
+
+      logDebug(debug, "scrollUp: Completed", {
+        afterScrollTop,
+        afterScrollHeight,
+        heightShift: `${heightShift > 0 ? "+" : ""}${heightShift}px`,
+      });
+
+      if (heightShift !== 0) {
+        logDebug(
+          debug,
+          `⚠️ CodeMirror height shifted by ${heightShift > 0 ? "+" : ""}${heightShift}px during scroll. This height correction causes the scrollbar thumb to adjust dynamically.`
+        );
+      }
+    }, 450);
   }
 
   return true;
@@ -188,33 +199,18 @@ export function scrollUp(
  * Immediately scrolls the container to the top.
  */
 export function scrollToTop(container: HTMLElement, smooth = false): void {
-  const existing = activeAnimations.get(container);
-  if (existing) {
-    cancelAnimationFrame(existing.frameId);
-    activeAnimations.delete(container);
-  }
-
-  if (smooth) {
-    smoothScrollTo(container, -container.scrollTop);
-  } else {
-    container.scrollTop = 0;
-  }
+  container.scrollTo({
+    top: 0,
+    behavior: smooth ? "smooth" : "auto",
+  });
 }
 
 /**
  * Immediately scrolls the container to the bottom.
  */
 export function scrollToBottom(container: HTMLElement, smooth = false): void {
-  const existing = activeAnimations.get(container);
-  if (existing) {
-    cancelAnimationFrame(existing.frameId);
-    activeAnimations.delete(container);
-  }
-
-  const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
-  if (smooth) {
-    smoothScrollTo(container, maxScroll - container.scrollTop);
-  } else {
-    container.scrollTop = container.scrollHeight;
-  }
+  container.scrollTo({
+    top: container.scrollHeight,
+    behavior: smooth ? "smooth" : "auto",
+  });
 }
