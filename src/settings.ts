@@ -103,7 +103,7 @@ export class PageFlowSettingTab extends PluginSettingTab {
       )
       .addSlider((slider) =>
         slider
-          .setLimits(100, 1000, 50)
+          .setLimits(100, 1000, 20)
           .setValue(this.plugin.settings.scrollDuration)
           .setDynamicTooltip()
           .onChange(async (value) => {

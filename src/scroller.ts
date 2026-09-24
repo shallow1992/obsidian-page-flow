@@ -76,7 +76,7 @@ const activeAnimations = new WeakMap<HTMLElement, ActiveScrollAnimation>();
 /**
  * Natural smooth scroll with smart queuing and CodeMirror layout-shift resistance.
  * Default duration: 280ms (comfortable, readable speed matching browser physics).
- * Capped at 2.5 screens to prevent runaway scrolling on excessive key presses.
+ * Capped at 8 screens to allow swift chained navigation while preventing infinite runaway.
  */
 export function smoothScrollBy(
   container: HTMLElement,
@@ -85,7 +85,7 @@ export function smoothScrollBy(
 ): void {
   const clientHeight = container.clientHeight;
   const maxScroll = Math.max(0, container.scrollHeight - clientHeight);
-  const maxQueuedDistance = clientHeight * 2.5;
+  const maxQueuedDistance = clientHeight * 8.0;
 
   const existing = activeAnimations.get(container);
   const currentScroll = container.scrollTop;
