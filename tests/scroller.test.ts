@@ -3,6 +3,7 @@ import {
   calculateScrollDelta,
   checkIsAtBottom,
   checkIsAtTop,
+  easeOutCubic,
 } from "../src/scroller";
 
 describe("Scroller calculation logic", () => {
@@ -51,6 +52,17 @@ describe("Scroller calculation logic", () => {
     it("clamps percentages between 10% and 100%", () => {
       expect(calculateScrollDelta(1000, 5)).toBe(100);
       expect(calculateScrollDelta(1000, 150)).toBe(1000);
+    });
+  });
+
+  describe("easeOutCubic", () => {
+    it("returns 0 at progress 0 and 1 at progress 1", () => {
+      expect(easeOutCubic(0)).toBe(0);
+      expect(easeOutCubic(1)).toBe(1);
+    });
+
+    it("has deceleration physics (progress 0.5 yields 0.875)", () => {
+      expect(easeOutCubic(0.5)).toBe(0.875);
     });
   });
 });
