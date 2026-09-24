@@ -37,10 +37,27 @@ export class PageFlowSettingTab extends PluginSettingTab {
               const setting = (this.app as any).setting;
               if (setting) {
                 const hotkeysTab = setting.openTabById("hotkeys");
-                if (hotkeysTab?.searchComponent) {
-                  hotkeysTab.searchComponent.setValue("Page Flow");
-                  hotkeysTab.updateHotkeyVisibility();
-                }
+                const applyFilter = () => {
+                  try {
+                    const searchComp = hotkeysTab?.searchComponent;
+                    if (searchComp) {
+                      if (searchComp.inputEl) {
+                        searchComp.inputEl.value = "Page Flow";
+                        searchComp.inputEl.dispatchEvent(new Event("input"));
+                      } else if (typeof searchComp.setValue === "function") {
+                        searchComp.setValue("Page Flow");
+                      }
+                      if (typeof hotkeysTab.updateHotkeyVisibility === "function") {
+                        hotkeysTab.updateHotkeyVisibility();
+                      }
+                    }
+                  } catch (err) {
+                    console.error("Failed to filter hotkey list", err);
+                  }
+                };
+
+                applyFilter();
+                window.setTimeout(applyFilter, 50);
               }
             } catch (e) {
               console.error("Failed to open hotkey settings", e);
