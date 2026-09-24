@@ -61,8 +61,7 @@ export default class PageFlowPlugin extends Plugin {
               this.settings.scrollPercentage,
               this.settings.smoothScroll,
               this.settings.thresholdPx,
-              this.settings.scrollDuration,
-              this.settings.easingStyle
+              this.settings.scrollDuration
             );
           }
         }
@@ -85,8 +84,7 @@ export default class PageFlowPlugin extends Plugin {
               this.settings.scrollPercentage,
               this.settings.smoothScroll,
               this.settings.thresholdPx,
-              this.settings.scrollDuration,
-              this.settings.easingStyle
+              this.settings.scrollDuration
             );
           }
         }
@@ -140,8 +138,7 @@ export default class PageFlowPlugin extends Plugin {
       this.settings.scrollPercentage,
       this.settings.smoothScroll,
       this.settings.thresholdPx,
-      this.settings.scrollDuration,
-      this.settings.easingStyle
+      this.settings.scrollDuration
     );
 
     if (!scrolled) {
@@ -161,8 +158,7 @@ export default class PageFlowPlugin extends Plugin {
       this.settings.scrollPercentage,
       this.settings.smoothScroll,
       this.settings.thresholdPx,
-      this.settings.scrollDuration,
-      this.settings.easingStyle
+      this.settings.scrollDuration
     );
 
     if (!scrolled) {
