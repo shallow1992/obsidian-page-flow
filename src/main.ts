@@ -9,6 +9,7 @@ import {
   scrollUp,
 } from "./scroller";
 import { resolveNextFile, resolvePrevFile } from "./navigator";
+import { t } from "./i18n";
 
 export default class PageFlowPlugin extends Plugin {
   settings: PageFlowSettings = DEFAULT_SETTINGS;
@@ -18,10 +19,12 @@ export default class PageFlowPlugin extends Plugin {
 
     this.addSettingTab(new PageFlowSettingTab(this.app, this));
 
+    const strings = t();
+
     // 1. Hybrid: Scroll down or next file
     this.addCommand({
       id: "scroll-or-next",
-      name: "Forward: Scroll down or go to next file",
+      name: strings.commands.scrollOrNext,
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view) return false;
@@ -35,7 +38,7 @@ export default class PageFlowPlugin extends Plugin {
     // 2. Hybrid: Scroll up or previous file
     this.addCommand({
       id: "scroll-or-prev",
-      name: "Backward: Scroll up or go to previous file",
+      name: strings.commands.scrollOrPrev,
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view) return false;
@@ -49,7 +52,7 @@ export default class PageFlowPlugin extends Plugin {
     // 3. Scroll only: Page down
     this.addCommand({
       id: "scroll-page-down",
-      name: "Scroll page down",
+      name: strings.commands.scrollPageDown,
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view) return false;
@@ -72,7 +75,7 @@ export default class PageFlowPlugin extends Plugin {
     // 4. Scroll only: Page up
     this.addCommand({
       id: "scroll-page-up",
-      name: "Scroll page up",
+      name: strings.commands.scrollPageUp,
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view) return false;
@@ -95,7 +98,7 @@ export default class PageFlowPlugin extends Plugin {
     // 5. File only: Next file
     this.addCommand({
       id: "go-to-next-file",
-      name: "Go to next file in folder",
+      name: strings.commands.goToNextFile,
       checkCallback: (checking: boolean) => {
         const activeFile = this.app.workspace.getActiveFile();
         if (!activeFile) return false;
@@ -109,7 +112,7 @@ export default class PageFlowPlugin extends Plugin {
     // 6. File only: Previous file
     this.addCommand({
       id: "go-to-prev-file",
-      name: "Go to previous file in folder",
+      name: strings.commands.goToPrevFile,
       checkCallback: (checking: boolean) => {
         const activeFile = this.app.workspace.getActiveFile();
         if (!activeFile) return false;
@@ -172,7 +175,7 @@ export default class PageFlowPlugin extends Plugin {
   private async openNextFile(currentFile: any): Promise<void> {
     const nextFile = resolveNextFile(currentFile, this.settings);
     if (!nextFile) {
-      new Notice("No next file in folder");
+      new Notice(t().notices.noNextFile);
       return;
     }
 
@@ -194,7 +197,7 @@ export default class PageFlowPlugin extends Plugin {
   private async openPrevFile(currentFile: any, startAtBottom = false): Promise<void> {
     const prevFile = resolvePrevFile(currentFile, this.settings);
     if (!prevFile) {
-      new Notice("No previous file in folder");
+      new Notice(t().notices.noPrevFile);
       return;
     }
 

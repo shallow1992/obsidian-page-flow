@@ -1,0 +1,56 @@
+export const en = {
+  commands: {
+    scrollOrNext: "Forward: Scroll down or go to next file",
+    scrollOrPrev: "Backward: Scroll up or go to previous file",
+    scrollPageDown: "Scroll page down",
+    scrollPageUp: "Scroll page up",
+    goToNextFile: "Go to next file in folder",
+    goToPrevFile: "Go to previous file in folder",
+  },
+  settings: {
+    title: "Page Flow Settings",
+    configureHotkeys: {
+      name: "Configure hotkeys",
+      desc: "Open Obsidian's hotkey settings filtered for Page Flow commands, or manually search 'Page Flow' in Settings > Hotkeys.",
+      buttonText: "Configure hotkeys",
+    },
+    scrollAmount: {
+      name: "Scroll amount (%)",
+      desc: "Percentage of the screen height to scroll on each step (recommended: 80-90%).",
+    },
+    smoothScroll: {
+      name: "Smooth scrolling",
+      desc: "Animate scrolling smoothly between page steps.",
+    },
+    scrollDuration: {
+      name: "Scroll animation duration (ms)",
+      desc: "Base duration of the smooth scroll animation in milliseconds (default: 280ms). Rapid key presses automatically accelerate for swift navigation.",
+    },
+    sortOrder: {
+      name: "File sort order",
+      desc: "The ordering rule used when navigating to the next or previous file in a folder.",
+      options: {
+        nameAsc: "File name (A to Z)",
+        nameDesc: "File name (Z to A)",
+        ctimeDesc: "Created date (Newest first)",
+        ctimeAsc: "Created date (Oldest first)",
+        mtimeDesc: "Modified date (Newest first)",
+        mtimeAsc: "Modified date (Oldest first)",
+      },
+    },
+    loopFolder: {
+      name: "Loop folder navigation",
+      desc: "When reaching the last file in a folder, cycle back to the first file.",
+    },
+    boundaryThreshold: {
+      name: "Boundary threshold (px)",
+      desc: "Buffer in pixels to detect when the top or bottom of a note has been reached.",
+    },
+  },
+  notices: {
+    noNextFile: "No next file in folder",
+    noPrevFile: "No previous file in folder",
+  },
+};
+
+export type TranslationStrings = typeof en;

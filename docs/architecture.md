@@ -41,8 +41,13 @@ RSSリーダー（Feedly等）や電子書籍ビューアのように、単一�
 src/
 ├── types.ts          # 設定およびドメイン型定義
 ├── settings.ts       # 設定データモデル、デフォルト値、設定タブUI
-├── scroller.ts       # Viewportスクロール量計算、末尾/先頭到達判定
+├── scroller.ts       # Viewportスクロール量計算、末尾/先頭到達判定、連打加速
 ├── navigator.ts      # フォルダ内ファイル一覧取得、ソート、次/前ファイルの解決
+├── i18n/             # 多言語化辞書（日英）およびロケール自動判定
+│   ├── locales/
+│   │   ├── en.ts
+│   │   └── ja.ts
+│   └── index.ts
 └── main.ts           # プラグインエントリーポイント、コマンド登録、ライフサイクル
 ```
 
@@ -84,3 +89,18 @@ src/
 - Node.js組み込みモジュール（`fs`, `path`, `child_process` 等）への依存を排除。
 - すべて標準 Web API および Obsidian 公式 API（`app.workspace`, `app.vault`）で完結。
 - デスクトップ環境・モバイル環境（iOS/Android）の両方で完全動作する設計。
+
+---
+
+## 5. 多言語化対応 (i18n Architecture)
+
+- **自動ロケール検出**:
+  - Obsidian 本体の言語設定（`window.localStorage.getItem("language")` または `moment.locale()`）を自動検知。
+  - 日本語環境（`ja`）では日本語、それ以外では英語（`en`）を表示。
+- **型安全な辞書構造**:
+  - 英語辞書（`en.ts`）を `TranslationStrings` 型として定義し、日本語辞書（`ja.ts`）に実装を強制することで、キーの抜け漏れをコンパイル時に検知。
+- **対象領域**:
+  - コマンドパレットのコマンド名
+  - 設定タブのタイトル・項目名・説明文・ドロップダウン選択肢
+  - ファイル未検出時の Notice 通知メッセージ
+

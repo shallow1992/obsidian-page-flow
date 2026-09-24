@@ -1,6 +1,7 @@
 import { App, Platform, PluginSettingTab, Setting } from "obsidian";
 import type PageFlowPlugin from "./main";
 import { PageFlowSettings, SortOrder } from "./types";
+import { t } from "./i18n";
 
 export const DEFAULT_SETTINGS: PageFlowSettings = {
   scrollPercentage: 85,
@@ -22,19 +23,18 @@ export class PageFlowSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+    const strings = t().settings;
 
-    containerEl.createEl("h2", { text: "Page Flow Settings" });
+    containerEl.createEl("h2", { text: strings.title });
 
     // Quick jump to Hotkeys settings (Desktop only, as mobile does not have a hotkeys settings tab)
     if (!Platform.isMobile) {
       new Setting(containerEl)
-        .setName("Configure hotkeys")
-        .setDesc(
-          "Open Obsidian's hotkey settings filtered for Page Flow commands, or manually search 'Page Flow' in Settings > Hotkeys."
-        )
+        .setName(strings.configureHotkeys.name)
+        .setDesc(strings.configureHotkeys.desc)
         .addButton((button) =>
           button
-            .setButtonText("Configure hotkeys")
+            .setButtonText(strings.configureHotkeys.buttonText)
             .setCta()
             .onClick(() => {
               try {
@@ -71,8 +71,8 @@ export class PageFlowSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl)
-      .setName("Scroll amount (%)")
-      .setDesc("Percentage of the screen height to scroll on each step (recommended: 80-90%).")
+      .setName(strings.scrollAmount.name)
+      .setDesc(strings.scrollAmount.desc)
       .addSlider((slider) =>
         slider
           .setLimits(50, 100, 5)
@@ -85,8 +85,8 @@ export class PageFlowSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Smooth scrolling")
-      .setDesc("Animate scrolling smoothly between page steps.")
+      .setName(strings.smoothScroll.name)
+      .setDesc(strings.smoothScroll.desc)
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.smoothScroll)
@@ -97,10 +97,8 @@ export class PageFlowSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Scroll animation duration (ms)")
-      .setDesc(
-        "Base duration of the smooth scroll animation in milliseconds (default: 280ms). Rapid key presses automatically accelerate for swift navigation."
-      )
+      .setName(strings.scrollDuration.name)
+      .setDesc(strings.scrollDuration.desc)
       .addSlider((slider) =>
         slider
           .setLimits(100, 1000, 20)
@@ -113,16 +111,16 @@ export class PageFlowSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("File sort order")
-      .setDesc("The ordering rule used when navigating to the next or previous file in a folder.")
+      .setName(strings.sortOrder.name)
+      .setDesc(strings.sortOrder.desc)
       .addDropdown((dropdown) =>
         dropdown
-          .addOption("name-asc", "File name (A to Z)")
-          .addOption("name-desc", "File name (Z to A)")
-          .addOption("ctime-desc", "Created date (Newest first)")
-          .addOption("ctime-asc", "Created date (Oldest first)")
-          .addOption("mtime-desc", "Modified date (Newest first)")
-          .addOption("mtime-asc", "Modified date (Oldest first)")
+          .addOption("name-asc", strings.sortOrder.options.nameAsc)
+          .addOption("name-desc", strings.sortOrder.options.nameDesc)
+          .addOption("ctime-desc", strings.sortOrder.options.ctimeDesc)
+          .addOption("ctime-asc", strings.sortOrder.options.ctimeAsc)
+          .addOption("mtime-desc", strings.sortOrder.options.mtimeDesc)
+          .addOption("mtime-asc", strings.sortOrder.options.mtimeAsc)
           .setValue(this.plugin.settings.sortOrder)
           .onChange(async (value) => {
             this.plugin.settings.sortOrder = value as SortOrder;
@@ -131,8 +129,8 @@ export class PageFlowSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Loop folder navigation")
-      .setDesc("When reaching the last file in a folder, cycle back to the first file.")
+      .setName(strings.loopFolder.name)
+      .setDesc(strings.loopFolder.desc)
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.loopFolder)
@@ -143,8 +141,8 @@ export class PageFlowSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Boundary threshold (px)")
-      .setDesc("Buffer in pixels to detect when the top or bottom of a note has been reached.")
+      .setName(strings.boundaryThreshold.name)
+      .setDesc(strings.boundaryThreshold.desc)
       .addSlider((slider) =>
         slider
           .setLimits(0, 50, 5)
