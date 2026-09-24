@@ -38,18 +38,6 @@ export function easeOutCubic(t: number): number {
   return 1 - Math.pow(1 - t, 3);
 }
 
-/**
- * Helper to log debug messages with [PageFlow] prefix if debug mode is active.
- */
-export function logDebug(enabled: boolean, message: string, data?: any): void {
-  if (!enabled) return;
-  if (data !== undefined) {
-    console.log(`[PageFlow] ${message}`, data);
-  } else {
-    console.log(`[PageFlow] ${message}`);
-  }
-}
-
 interface ActiveScrollAnimation {
   startScrollTop: number;
   targetScrollTop: number;
@@ -68,8 +56,7 @@ const activeAnimations = new WeakMap<HTMLElement, ActiveScrollAnimation>();
 export function smoothScrollBy(
   container: HTMLElement,
   delta: number,
-  duration = 280,
-  debug = false
+  duration = 280
 ): void {
   const clientHeight = container.clientHeight;
   const maxScroll = Math.max(0, container.scrollHeight - clientHeight);
@@ -99,13 +86,6 @@ export function smoothScrollBy(
   const startScrollTop = container.scrollTop;
   const distance = clampedTarget - startScrollTop;
 
-  logDebug(debug, "smoothScrollBy: Starting animation", {
-    startScrollTop,
-    clampedTarget,
-    distance,
-    isChained: !!existing,
-  });
-
   if (Math.abs(distance) < 1) {
     container.scrollTop = clampedTarget;
     activeAnimations.delete(container);
@@ -134,10 +114,6 @@ export function smoothScrollBy(
       // Guarantee exact arrival at target
       container.scrollTop = clampedTarget;
       activeAnimations.delete(container);
-      logDebug(debug, "smoothScrollBy: Arrived at target", {
-        finalScrollTop: container.scrollTop,
-        targetScrollTop: clampedTarget,
-      });
     }
   };
 
@@ -186,8 +162,7 @@ export function scrollDown(
   container: HTMLElement,
   percentage: number,
   smooth: boolean,
-  threshold = 10,
-  debug = false
+  threshold = 10
 ): boolean {
   const existing = activeAnimations.get(container);
   const currentOrTargetScrollTop = existing ? existing.targetScrollTop : container.scrollTop;
@@ -195,26 +170,13 @@ export function scrollDown(
   const scrollHeight = container.scrollHeight;
 
   if (checkIsAtBottom(currentOrTargetScrollTop, clientHeight, scrollHeight, threshold)) {
-    logDebug(debug, "scrollDown: Already at bottom -> triggering next file", {
-      currentOrTargetScrollTop,
-      clientHeight,
-      scrollHeight,
-      threshold,
-    });
     return false;
   }
 
   const delta = calculateScrollDelta(clientHeight, percentage);
 
-  logDebug(debug, "scrollDown: Triggered", {
-    beforeScrollTop: container.scrollTop,
-    currentOrTargetScrollTop,
-    delta,
-    smooth,
-  });
-
   if (smooth) {
-    smoothScrollBy(container, delta, 280, debug);
+    smoothScrollBy(container, delta, 280);
   } else {
     container.scrollTop = Math.min(
       scrollHeight - clientHeight,
@@ -232,32 +194,20 @@ export function scrollUp(
   container: HTMLElement,
   percentage: number,
   smooth: boolean,
-  threshold = 10,
-  debug = false
+  threshold = 10
 ): boolean {
   const existing = activeAnimations.get(container);
   const currentOrTargetScrollTop = existing ? existing.targetScrollTop : container.scrollTop;
   const clientHeight = container.clientHeight;
 
   if (checkIsAtTop(currentOrTargetScrollTop, threshold)) {
-    logDebug(debug, "scrollUp: Already at top -> triggering previous file", {
-      currentOrTargetScrollTop,
-      threshold,
-    });
     return false;
   }
 
   const delta = calculateScrollDelta(clientHeight, percentage);
 
-  logDebug(debug, "scrollUp: Triggered", {
-    beforeScrollTop: container.scrollTop,
-    currentOrTargetScrollTop,
-    delta,
-    smooth,
-  });
-
   if (smooth) {
-    smoothScrollBy(container, -delta, 280, debug);
+    smoothScrollBy(container, -delta, 280);
   } else {
     container.scrollTop = Math.max(0, container.scrollTop - delta);
   }
@@ -276,7 +226,7 @@ export function scrollToTop(container: HTMLElement, smooth = false): void {
   }
 
   if (smooth) {
-    smoothScrollBy(container, -container.scrollTop, 280, false);
+    smoothScrollBy(container, -container.scrollTop, 280);
   } else {
     container.scrollTop = 0;
   }
@@ -294,7 +244,7 @@ export function scrollToBottom(container: HTMLElement, smooth = false): void {
 
   const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
   if (smooth) {
-    smoothScrollBy(container, maxScroll - container.scrollTop, 280, false);
+    smoothScrollBy(container, maxScroll - container.scrollTop, 280);
   } else {
     container.scrollTop = container.scrollHeight;
   }

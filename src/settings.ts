@@ -8,7 +8,6 @@ export const DEFAULT_SETTINGS: PageFlowSettings = {
   sortOrder: "name-asc",
   loopFolder: false,
   thresholdPx: 10,
-  debugLogging: true,
 };
 
 export class PageFlowSettingTab extends PluginSettingTab {
@@ -24,6 +23,30 @@ export class PageFlowSettingTab extends PluginSettingTab {
     containerEl.empty();
 
     containerEl.createEl("h2", { text: "Page Flow Settings" });
+
+    // Quick jump to Hotkeys settings filtered by "Page Flow"
+    new Setting(containerEl)
+      .setName("Configure hotkeys")
+      .setDesc("Open Obsidian's hotkey settings filtered for Page Flow commands.")
+      .addButton((button) =>
+        button
+          .setButtonText("Configure hotkeys")
+          .setCta()
+          .onClick(() => {
+            try {
+              const setting = (this.app as any).setting;
+              if (setting) {
+                const hotkeysTab = setting.openTabById("hotkeys");
+                if (hotkeysTab?.searchComponent) {
+                  hotkeysTab.searchComponent.setValue("Page Flow");
+                  hotkeysTab.updateHotkeyVisibility();
+                }
+              }
+            } catch (e) {
+              console.error("Failed to open hotkey settings", e);
+            }
+          })
+      );
 
     new Setting(containerEl)
       .setName("Scroll amount (%)")
@@ -91,18 +114,6 @@ export class PageFlowSettingTab extends PluginSettingTab {
           .setDynamicTooltip()
           .onChange(async (value) => {
             this.plugin.settings.thresholdPx = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("Debug logging")
-      .setDesc("Output detailed scroll diagnostics to the developer console (Cmd + Option + I).")
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.debugLogging)
-          .onChange(async (value) => {
-            this.plugin.settings.debugLogging = value;
             await this.plugin.saveSettings();
           })
       );

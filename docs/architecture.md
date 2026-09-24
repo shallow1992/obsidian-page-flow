@@ -53,9 +53,14 @@ src/
 - **スクロール量の計算**:
   - `container.clientHeight * (scrollPercentage / 100)`
   - デフォルト 85% の移動量により、前の画面の末尾15%が残り、視線の連続性を維持。
+- **スマート連打キューイング (Smart Queued Smooth Scroll)**:
+  - ブラウザネイティブの物理速度に近い 280ms の `easeOutCubic` アニメーションを独自管理。
+  - アニメーション中にキーを連打した際、前のアニメーションを潰さず目標位置（Target）へ正確に累積加算（最大 2.5 画面分キャップ）。
+- **CodeMirror 6 の仮想スクロール（高さ急変）への耐性**:
+  - 長大ノートの中間地点等で CodeMirror 6 が行高さを再測定し全体の高さが急変（+300px等）しても、エディタの強制ブレーキに負けず、指示された移動量を確実に運び切る。
 - **境界判定**:
-  - 下方向到達: `scrollTop + clientHeight >= scrollHeight - threshold`
-  - 上方向到達: `scrollTop <= threshold`
+  - 下方向到達: `currentOrTargetScrollTop + clientHeight >= scrollHeight - threshold`
+  - 上方向到達: `currentOrTargetScrollTop <= threshold`
 
 ### `navigator.ts` (ファイルナビゲーションモジュール)
 - カレントファイルの親フォルダ（`file.parent`）から Markdown ファイル（`TFile` かつ `extension === 'md'`）を抽出。

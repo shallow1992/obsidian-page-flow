@@ -12,5 +12,4 @@ export interface PageFlowSettings {
   sortOrder: SortOrder;
   loopFolder: boolean;
   thresholdPx: number;
-  debugLogging: boolean;
 }

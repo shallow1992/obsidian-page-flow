@@ -68,6 +68,17 @@ export class Setting {
   addToggle() { return this; }
   addDropdown() { return this; }
   addText() { return this; }
+  addButton(cb?: (button: any) => any) {
+    if (cb) {
+      const button = {
+        setButtonText: () => button,
+        setCta: () => button,
+        onClick: () => button,
+      };
+      cb(button);
+    }
+    return this;
+  }
 }
 
 export class Notice {
