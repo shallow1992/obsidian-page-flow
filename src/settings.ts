@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, Platform, PluginSettingTab, Setting } from "obsidian";
 import type PageFlowPlugin from "./main";
 import { PageFlowSettings, SortOrder } from "./types";
 
@@ -24,46 +24,50 @@ export class PageFlowSettingTab extends PluginSettingTab {
 
     containerEl.createEl("h2", { text: "Page Flow Settings" });
 
-    // Quick jump to Hotkeys settings filtered by "Page Flow"
-    new Setting(containerEl)
-      .setName("Configure hotkeys")
-      .setDesc("Open Obsidian's hotkey settings filtered for Page Flow commands.")
-      .addButton((button) =>
-        button
-          .setButtonText("Configure hotkeys")
-          .setCta()
-          .onClick(() => {
-            try {
-              const setting = (this.app as any).setting;
-              if (setting) {
-                const hotkeysTab = setting.openTabById("hotkeys");
-                const applyFilter = () => {
-                  try {
-                    const searchComp = hotkeysTab?.searchComponent;
-                    if (searchComp) {
-                      if (searchComp.inputEl) {
-                        searchComp.inputEl.value = "Page Flow";
-                        searchComp.inputEl.dispatchEvent(new Event("input"));
-                      } else if (typeof searchComp.setValue === "function") {
-                        searchComp.setValue("Page Flow");
+    // Quick jump to Hotkeys settings (Desktop only, as mobile does not have a hotkeys settings tab)
+    if (!Platform.isMobile) {
+      new Setting(containerEl)
+        .setName("Configure hotkeys")
+        .setDesc(
+          "Open Obsidian's hotkey settings filtered for Page Flow commands, or manually search 'Page Flow' in Settings > Hotkeys."
+        )
+        .addButton((button) =>
+          button
+            .setButtonText("Configure hotkeys")
+            .setCta()
+            .onClick(() => {
+              try {
+                const setting = (this.app as any).setting;
+                if (setting) {
+                  const hotkeysTab = setting.openTabById("hotkeys");
+                  const applyFilter = () => {
+                    try {
+                      const searchComp = hotkeysTab?.searchComponent;
+                      if (searchComp) {
+                        if (searchComp.inputEl) {
+                          searchComp.inputEl.value = "Page Flow";
+                          searchComp.inputEl.dispatchEvent(new Event("input"));
+                        } else if (typeof searchComp.setValue === "function") {
+                          searchComp.setValue("Page Flow");
+                        }
+                        if (typeof hotkeysTab.updateHotkeyVisibility === "function") {
+                          hotkeysTab.updateHotkeyVisibility();
+                        }
                       }
-                      if (typeof hotkeysTab.updateHotkeyVisibility === "function") {
-                        hotkeysTab.updateHotkeyVisibility();
-                      }
+                    } catch (err) {
+                      console.error("Failed to filter hotkey list", err);
                     }
-                  } catch (err) {
-                    console.error("Failed to filter hotkey list", err);
-                  }
-                };
+                  };
 
-                applyFilter();
-                window.setTimeout(applyFilter, 50);
+                  applyFilter();
+                  window.setTimeout(applyFilter, 50);
+                }
+              } catch (e) {
+                console.error("Failed to open hotkey settings", e);
               }
-            } catch (e) {
-              console.error("Failed to open hotkey settings", e);
-            }
-          })
-      );
+            })
+        );
+    }
 
     new Setting(containerEl)
       .setName("Scroll amount (%)")
