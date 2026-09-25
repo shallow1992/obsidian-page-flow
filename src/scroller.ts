@@ -31,6 +31,23 @@ export function calculateScrollDelta(clientHeight: number, percentage: number): 
 }
 
 /**
+ * Pure calculation helper: calculates maximum velocity for smooth scrolling.
+ * Scales velocity under rapid consecutive key presses (chainCount).
+ * Base velocity: Math.abs(delta) / baseDuration (px/ms).
+ * Multipliers: 1.0x (1st) -> 1.55x (2nd) -> 2.1x (3rd) -> 2.65x (4th) -> 3.2x (5th+).
+ */
+export function calculateTargetVelocity(
+  delta: number,
+  baseDuration: number,
+  chainCount: number
+): number {
+  const safeDuration = Math.max(50, baseDuration);
+  const baseVelocity = Math.abs(delta) / safeDuration;
+  const multiplier = 1 + Math.min(chainCount, 4) * 0.55;
+  return baseVelocity * multiplier;
+}
+
+/**
  * Pure calculation helper: calculates effective duration under rapid consecutive key presses.
  * Uses exponential decay (0.65^chainCount) down to minDuration (default: 150ms).
  */
@@ -63,19 +80,20 @@ export function easeOutCubic(t: number): number {
 }
 
 interface ActiveScrollAnimation {
-  startScrollTop: number;
   targetScrollTop: number;
-  startTime: number;
-  duration: number;
-  frameId: number;
+  currentVelocity: number; // px/ms
   chainCount: number;
+  lastTime: number;
+  frameId: number;
+  delta: number;
+  duration: number;
 }
 
 const activeAnimations = new WeakMap<HTMLElement, ActiveScrollAnimation>();
 
 /**
- * Natural smooth scroll with smart queuing and CodeMirror layout-shift resistance.
- * Default duration: 280ms (comfortable, readable speed matching browser physics).
+ * Natural smooth scroll with continuous momentum physics and CodeMirror layout-shift resistance.
+ * Preserves velocity across rapid key presses, accelerating up to 3.2x without halting.
  * Capped at 8 screens to allow swift chained navigation while preventing infinite runaway.
  */
 export function smoothScrollBy(
@@ -90,11 +108,7 @@ export function smoothScrollBy(
   const existing = activeAnimations.get(container);
   const currentScroll = container.scrollTop;
 
-  // Calculate chained input acceleration
-  const chainCount = existing ? existing.chainCount + 1 : 0;
-  const effectiveDuration = calculateChainedDuration(duration, chainCount);
-
-  // If already animating, chain from the existing target position
+  // Base target: chain from existing target if animating
   const baseTarget = existing ? existing.targetScrollTop : currentScroll;
   let newTarget = baseTarget + delta;
 
@@ -108,54 +122,94 @@ export function smoothScrollBy(
   // Clamp within container scrollable range
   const clampedTarget = Math.max(0, Math.min(maxScroll, newTarget));
 
-  if (existing) {
-    cancelAnimationFrame(existing.frameId);
-  }
-
-  const startScrollTop = container.scrollTop;
-  const distance = clampedTarget - startScrollTop;
-
-  if (Math.abs(distance) < 1) {
+  // If already at target, finish immediately
+  if (Math.abs(clampedTarget - currentScroll) < 1) {
     container.scrollTop = clampedTarget;
-    activeAnimations.delete(container);
+    if (existing) {
+      cancelAnimationFrame(existing.frameId);
+      activeAnimations.delete(container);
+    }
     return;
   }
 
+  // If already animating, seamlessly extend target and boost chainCount without resetting velocity!
+  if (existing) {
+    existing.targetScrollTop = clampedTarget;
+    existing.chainCount += 1;
+    existing.delta = delta;
+    existing.duration = duration;
+    return;
+  }
+
+  // Start new continuous velocity physics loop
   const startTime = typeof performance !== "undefined" ? performance.now() : Date.now();
-
-  const step = (now: number) => {
-    const elapsed = now - startTime;
-    const progress = Math.min(1, elapsed / effectiveDuration);
-    const eased = easeInOutCubic(progress);
-
-    container.scrollTop = startScrollTop + distance * eased;
-
-    if (progress < 1) {
-      const frameId = requestAnimationFrame(step);
-      activeAnimations.set(container, {
-        startScrollTop,
-        targetScrollTop: clampedTarget,
-        startTime,
-        duration: effectiveDuration,
-        frameId,
-        chainCount,
-      });
-    } else {
-      // Guarantee exact arrival at target and reset animation tracking
-      container.scrollTop = clampedTarget;
-      activeAnimations.delete(container);
-    }
+  const anim: ActiveScrollAnimation = {
+    targetScrollTop: clampedTarget,
+    currentVelocity: 0.1, // initial gentle impulse
+    chainCount: 0,
+    lastTime: startTime,
+    frameId: 0,
+    delta,
+    duration,
   };
 
-  const frameId = requestAnimationFrame(step);
-  activeAnimations.set(container, {
-    startScrollTop,
-    targetScrollTop: clampedTarget,
-    startTime,
-    duration: effectiveDuration,
-    frameId,
-    chainCount,
-  });
+  const step = (now: number) => {
+    const currentAnim = activeAnimations.get(container);
+    if (!currentAnim) return;
+
+    const dt = Math.min(32, Math.max(1, now - currentAnim.lastTime));
+    currentAnim.lastTime = now;
+
+    const currScroll = container.scrollTop;
+    const remaining = currentAnim.targetScrollTop - currScroll;
+    const distance = Math.abs(remaining);
+
+    // Reached target within 1px
+    if (distance <= 1) {
+      container.scrollTop = currentAnim.targetScrollTop;
+      activeAnimations.delete(container);
+      return;
+    }
+
+    const direction = Math.sign(remaining);
+    const maxVelocity = calculateTargetVelocity(
+      currentAnim.delta,
+      currentAnim.duration,
+      currentAnim.chainCount
+    );
+
+    // Deceleration zone: natural ease-out brake near the target
+    const brakeDistance = Math.max(80, Math.abs(currentAnim.delta) * 0.7);
+    let targetSpeed = maxVelocity;
+
+    if (distance < brakeDistance) {
+      const ratio = distance / brakeDistance;
+      targetSpeed = Math.max(0.1, maxVelocity * Math.sqrt(ratio));
+    }
+
+    // Smooth velocity adjustment
+    if (currentAnim.currentVelocity < targetSpeed) {
+      const accelRate = 0.012; // px/ms^2
+      currentAnim.currentVelocity = Math.min(
+        targetSpeed,
+        currentAnim.currentVelocity + accelRate * dt
+      );
+    } else {
+      const decelRate = 0.018; // px/ms^2
+      currentAnim.currentVelocity = Math.max(
+        targetSpeed,
+        currentAnim.currentVelocity - decelRate * dt
+      );
+    }
+
+    const stepMove = Math.min(distance, currentAnim.currentVelocity * dt);
+    container.scrollTop = currScroll + stepMove * direction;
+
+    currentAnim.frameId = requestAnimationFrame(step);
+  };
+
+  anim.frameId = requestAnimationFrame(step);
+  activeAnimations.set(container, anim);
 }
 
 /**

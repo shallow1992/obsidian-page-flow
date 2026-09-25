@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   calculateChainedDuration,
   calculateScrollDelta,
+  calculateTargetVelocity,
   checkIsAtBottom,
   checkIsAtTop,
   easeInOutCubic,
@@ -54,6 +55,31 @@ describe("Scroller calculation logic", () => {
     it("clamps percentages between 10% and 100%", () => {
       expect(calculateScrollDelta(1000, 5)).toBe(100);
       expect(calculateScrollDelta(1000, 150)).toBe(1000);
+    });
+  });
+
+  describe("calculateTargetVelocity", () => {
+    it("calculates base velocity correctly for single input (chainCount 0)", () => {
+      // 600px / 600ms = 1.0 px/ms
+      expect(calculateTargetVelocity(600, 600, 0)).toBeCloseTo(1.0);
+      // 560px / 280ms = 2.0 px/ms
+      expect(calculateTargetVelocity(560, 280, 0)).toBeCloseTo(2.0);
+    });
+
+    it("accelerates velocity linearly per consecutive chain hit", () => {
+      const base = calculateTargetVelocity(600, 600, 0); // 1.0
+      // chain 1 -> 1.55x
+      expect(calculateTargetVelocity(600, 600, 1)).toBeCloseTo(base * 1.55);
+      // chain 2 -> 2.10x
+      expect(calculateTargetVelocity(600, 600, 2)).toBeCloseTo(base * 2.10);
+      // chain 3 -> 2.65x
+      expect(calculateTargetVelocity(600, 600, 3)).toBeCloseTo(base * 2.65);
+    });
+
+    it("caps maximum velocity acceleration at chain 4 (3.2x)", () => {
+      const base = calculateTargetVelocity(600, 600, 0);
+      expect(calculateTargetVelocity(600, 600, 4)).toBeCloseTo(base * 3.20);
+      expect(calculateTargetVelocity(600, 600, 10)).toBeCloseTo(base * 3.20);
     });
   });
 
