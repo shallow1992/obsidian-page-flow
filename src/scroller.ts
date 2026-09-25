@@ -31,6 +31,14 @@ export function calculateScrollDelta(clientHeight: number, percentage: number): 
 }
 
 /**
+ * Pure calculation helper: calculates velocity multiplier based on chainCount.
+ * Multipliers: 1.0x (1st) -> 1.55x (2nd) -> 2.1x (3rd) -> 2.65x (4th) -> 3.2x (5th+).
+ */
+export function calculateVelocityMultiplier(chainCount: number): number {
+  return 1 + Math.min(chainCount, 4) * 0.55;
+}
+
+/**
  * Pure calculation helper: calculates maximum velocity for smooth scrolling.
  * Scales velocity under rapid consecutive key presses (chainCount).
  * Base velocity: Math.abs(delta) / baseDuration (px/ms).
@@ -43,8 +51,7 @@ export function calculateTargetVelocity(
 ): number {
   const safeDuration = Math.max(50, baseDuration);
   const baseVelocity = Math.abs(delta) / safeDuration;
-  const multiplier = 1 + Math.min(chainCount, 4) * 0.55;
-  return baseVelocity * multiplier;
+  return baseVelocity * calculateVelocityMultiplier(chainCount);
 }
 
 /**
@@ -84,6 +91,7 @@ interface ActiveScrollAnimation {
   currentVelocity: number; // px/ms
   chainCount: number;
   lastTime: number;
+  lastInputTime: number;
   frameId: number;
   delta: number;
   duration: number;
@@ -93,8 +101,8 @@ const activeAnimations = new WeakMap<HTMLElement, ActiveScrollAnimation>();
 
 /**
  * Natural smooth scroll with continuous momentum physics and CodeMirror layout-shift resistance.
- * Preserves velocity across rapid key presses, accelerating up to 3.2x without halting.
- * Capped at 8 screens to allow swift chained navigation while preventing infinite runaway.
+ * Preserves velocity across rapid key presses, dynamically scaling both velocity and target distance.
+ * Holds brake during rapid chaining to maintain cruising momentum until key inputs cease.
  */
 export function smoothScrollBy(
   container: HTMLElement,
@@ -103,14 +111,24 @@ export function smoothScrollBy(
 ): void {
   const clientHeight = container.clientHeight;
   const maxScroll = Math.max(0, container.scrollHeight - clientHeight);
-  const maxQueuedDistance = clientHeight * 8.0;
+  const maxQueuedDistance = clientHeight * 12.0;
 
   const existing = activeAnimations.get(container);
   const currentScroll = container.scrollTop;
+  const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+
+  let effectiveDelta = delta;
+  let nextChainCount = 0;
+
+  if (existing) {
+    nextChainCount = existing.chainCount + 1;
+    const multiplier = calculateVelocityMultiplier(nextChainCount);
+    effectiveDelta = Math.round(delta * multiplier);
+  }
 
   // Base target: chain from existing target if animating
   const baseTarget = existing ? existing.targetScrollTop : currentScroll;
-  let newTarget = baseTarget + delta;
+  let newTarget = baseTarget + effectiveDelta;
 
   // Cap maximum queued distance ahead of current position
   if (newTarget > currentScroll + maxQueuedDistance) {
@@ -138,12 +156,14 @@ export function smoothScrollBy(
   // If already animating, seamlessly extend target and boost chainCount without resetting velocity!
   if (existing) {
     existing.targetScrollTop = clampedTarget;
-    existing.chainCount += 1;
+    existing.chainCount = nextChainCount;
+    existing.lastInputTime = now;
     existing.delta = delta;
     existing.duration = duration;
     console.log(
       `[Page Flow] Key pressed (chain extended): chainCount=${existing.chainCount}, ` +
-      `currentScroll=${currentScroll.toFixed(1)}, targetScrollTop=${existing.targetScrollTop.toFixed(1)}, ` +
+      `effectiveDelta=${effectiveDelta}, currentScroll=${currentScroll.toFixed(1)}, ` +
+      `targetScrollTop=${existing.targetScrollTop.toFixed(1)}, ` +
       `distance=${Math.abs(existing.targetScrollTop - currentScroll).toFixed(1)}, ` +
       `currentVelocity=${existing.currentVelocity.toFixed(3)} px/ms`
     );
@@ -151,12 +171,12 @@ export function smoothScrollBy(
   }
 
   // Start new continuous velocity physics loop
-  const startTime = typeof performance !== "undefined" ? performance.now() : Date.now();
   const anim: ActiveScrollAnimation = {
     targetScrollTop: clampedTarget,
     currentVelocity: 0.1, // initial gentle impulse
     chainCount: 0,
-    lastTime: startTime,
+    lastTime: now,
+    lastInputTime: now,
     frameId: 0,
     delta,
     duration,
@@ -169,23 +189,32 @@ export function smoothScrollBy(
   );
 
   let frameCount = 0;
-  const step = (now: number) => {
+  const step = (timestamp: number) => {
     const currentAnim = activeAnimations.get(container);
     if (!currentAnim) return;
 
-    const dt = Math.min(32, Math.max(1, now - currentAnim.lastTime));
-    currentAnim.lastTime = now;
+    const dt = Math.min(32, Math.max(1, timestamp - currentAnim.lastTime));
+    currentAnim.lastTime = timestamp;
 
     const currScroll = container.scrollTop;
     const remaining = currentAnim.targetScrollTop - currScroll;
     const distance = Math.abs(remaining);
 
+    const timeSinceLastInput = timestamp - currentAnim.lastInputTime;
+    const isActivelyChaining = timeSinceLastInput < 220 && currentAnim.chainCount > 0;
+
     // Reached target within 1px
     if (distance <= 1) {
+      if (isActivelyChaining) {
+        // User may be rapidly pressing keys; hold at target without killing the animation
+        container.scrollTop = currentAnim.targetScrollTop;
+        currentAnim.frameId = requestAnimationFrame(step);
+        return;
+      }
       console.log(
         `[Page Flow] Stopped! Reason: Reached target (dist <= 1). ` +
         `finalScrollTop=${currScroll.toFixed(1)}, target=${currentAnim.targetScrollTop.toFixed(1)}, ` +
-        `chainCount=${currentAnim.chainCount}`
+        `chainCount=${currentAnim.chainCount}, idleTime=${timeSinceLastInput.toFixed(0)}ms`
       );
       container.scrollTop = currentAnim.targetScrollTop;
       activeAnimations.delete(container);
@@ -199,18 +228,18 @@ export function smoothScrollBy(
       currentAnim.chainCount
     );
 
-    // Deceleration zone: natural ease-out brake near the target
-    const brakeDistance = Math.max(80, Math.abs(currentAnim.delta) * 0.7);
+    // Deceleration zone: natural ease-out brake near the target ONLY when user is not actively chaining
+    const brakeDistance = Math.max(100, Math.abs(currentAnim.delta) * 0.7);
     let targetSpeed = maxVelocity;
 
-    if (distance < brakeDistance) {
+    if (!isActivelyChaining && distance < brakeDistance) {
       const ratio = distance / brakeDistance;
       targetSpeed = Math.max(0.1, maxVelocity * Math.sqrt(ratio));
     }
 
     // Smooth velocity adjustment
     if (currentAnim.currentVelocity < targetSpeed) {
-      const accelRate = 0.012; // px/ms^2
+      const accelRate = 0.025; // px/ms^2 (responsive acceleration)
       currentAnim.currentVelocity = Math.min(
         targetSpeed,
         currentAnim.currentVelocity + accelRate * dt
@@ -228,12 +257,12 @@ export function smoothScrollBy(
 
     frameCount++;
     // Log periodic progress or when entering braking zone
-    if (frameCount % 6 === 0 || distance < brakeDistance) {
+    if (frameCount % 6 === 0 || (!isActivelyChaining && distance < brakeDistance)) {
       console.log(
         `[Page Flow] Frame #${frameCount}: v=${currentAnim.currentVelocity.toFixed(3)} px/ms ` +
         `(targetSpeed=${targetSpeed.toFixed(3)}, maxV=${maxVelocity.toFixed(3)}), ` +
         `scroll=${container.scrollTop.toFixed(1)}, target=${currentAnim.targetScrollTop.toFixed(1)}, ` +
-        `dist=${distance.toFixed(1)}, inBrakeZone=${distance < brakeDistance}`
+        `dist=${distance.toFixed(1)}, isChaining=${isActivelyChaining}`
       );
     }
 
@@ -288,6 +317,14 @@ export function scrollDown(
   const scrollHeight = container.scrollHeight;
 
   if (checkIsAtBottom(currentOrTargetScrollTop, clientHeight, scrollHeight, threshold)) {
+    // If target reached bottom but visible scroll is still catching up, let it finish scrolling!
+    if (existing && !checkIsAtBottom(container.scrollTop, clientHeight, scrollHeight, threshold)) {
+      console.log(
+        `[Page Flow] scrollDown: target at bottom, but container still visibly scrolling. ` +
+        `scrollTop=${container.scrollTop.toFixed(1)}, target=${existing.targetScrollTop.toFixed(1)}`
+      );
+      return true;
+    }
     console.log(
       `[Page Flow] scrollDown blocked: checkIsAtBottom=true. ` +
       `currentOrTargetScrollTop=${currentOrTargetScrollTop.toFixed(1)}, clientHeight=${clientHeight}, scrollHeight=${scrollHeight}, threshold=${threshold}`
@@ -324,6 +361,14 @@ export function scrollUp(
   const clientHeight = container.clientHeight;
 
   if (checkIsAtTop(currentOrTargetScrollTop, threshold)) {
+    // If target reached top but visible scroll is still catching up, let it finish scrolling!
+    if (existing && !checkIsAtTop(container.scrollTop, threshold)) {
+      console.log(
+        `[Page Flow] scrollUp: target at top, but container still visibly scrolling. ` +
+        `scrollTop=${container.scrollTop.toFixed(1)}, target=${existing.targetScrollTop.toFixed(1)}`
+      );
+      return true;
+    }
     console.log(
       `[Page Flow] scrollUp blocked: checkIsAtTop=true. ` +
       `currentOrTargetScrollTop=${currentOrTargetScrollTop.toFixed(1)}, threshold=${threshold}`
