@@ -199,17 +199,26 @@ export class PageFlowSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName(strings.resetToDefaults.name)
       .setDesc(strings.resetToDefaults.desc)
-      .addButton((button) =>
-        button
-          .setButtonText(strings.resetToDefaults.buttonText)
-          .setDestructive()
-          .onClick(async () => {
-            this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS);
-            await this.plugin.saveSettings();
-            this.display();
-            new Notice(t().notices.settingsReset);
-          })
-      );
+      .addButton((button) => {
+        button.setButtonText(strings.resetToDefaults.buttonText);
+
+        const safeBtn = button as unknown as {
+          setDestructive?: () => void;
+          setWarning?: () => void;
+        };
+        if (typeof safeBtn.setDestructive === "function") {
+          safeBtn.setDestructive();
+        } else if (typeof safeBtn.setWarning === "function") {
+          safeBtn.setWarning();
+        }
+
+        button.onClick(async () => {
+          this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS);
+          await this.plugin.saveSettings();
+          this.display();
+          new Notice(t().notices.settingsReset);
+        });
+      });
   }
 
   /**
