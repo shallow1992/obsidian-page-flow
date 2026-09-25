@@ -57,9 +57,15 @@ export const ja: TranslationStrings = {
       name: "境界到達の判定しきい値 (px)",
       desc: "ノートの最上部または最下部に到達したと判定するためのバッファ（ピクセル）。",
     },
+    resetToDefaults: {
+      name: "デフォルト値に戻す",
+      desc: "すべての設定をインストール時の初期値にリセットします。",
+      buttonText: "デフォルトに戻す",
+    },
   },
   notices: {
     noNextFile: "フォルダ内に次のファイルがありません",
     noPrevFile: "フォルダ内に前のファイルがありません",
+    settingsReset: "設定を初期値にリセットしました",
   },
 };

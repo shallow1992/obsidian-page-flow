@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findNextFile, findPrevFile, sortFiles } from "../src/navigator";
+import { findNextFile, findPrevFile, mapObsidianSortOrder, sortFiles } from "../src/navigator";
 import { TFile } from "obsidian";
 
 function createMockFile(basename: string, ctime: number, mtime: number): TFile {
@@ -127,6 +127,18 @@ describe("Navigator file sorting and resolution", () => {
 
         const sorted = sortFiles(files, "file-explorer", mockApp);
         expect(sorted.map((f) => f.basename)).toEqual(["C_Note", "B_Note", "A_Note"]);
+      });
+    });
+
+    describe("mapObsidianSortOrder", () => {
+      it("maps Obsidian sort order strings correctly", () => {
+        expect(mapObsidianSortOrder("alphabetical")).toBe("name-asc");
+        expect(mapObsidianSortOrder("alphabeticalReverse")).toBe("name-desc");
+        expect(mapObsidianSortOrder("byModifiedTime")).toBe("mtime-desc");
+        expect(mapObsidianSortOrder("byModifiedTimeReverse")).toBe("mtime-asc");
+        expect(mapObsidianSortOrder("byCreatedTime")).toBe("ctime-desc");
+        expect(mapObsidianSortOrder("byCreatedTimeReverse")).toBe("ctime-asc");
+        expect(mapObsidianSortOrder("unknown")).toBe("name-asc");
       });
     });
   });

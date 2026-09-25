@@ -2,6 +2,28 @@ import { App, TFile, TFolder } from "obsidian";
 import { PageFlowSettings, SortOrder } from "./types";
 
 /**
+ * Maps Obsidian's internal file explorer sortOrder setting strings to our SortOrder.
+ */
+export function mapObsidianSortOrder(sortSetting: string): SortOrder {
+  switch (sortSetting) {
+    case "alphabetical":
+      return "name-asc";
+    case "alphabeticalReverse":
+      return "name-desc";
+    case "byModifiedTime":
+      return "mtime-desc";
+    case "byModifiedTimeReverse":
+      return "mtime-asc";
+    case "byCreatedTime":
+      return "ctime-desc";
+    case "byCreatedTimeReverse":
+      return "ctime-asc";
+    default:
+      return "name-asc";
+  }
+}
+
+/**
  * Sorts files according to the visual DOM order in Obsidian's File Explorer.
  * Falls back to Obsidian's file explorer sortOrder setting, or name-asc if unavailable.
  */
@@ -57,27 +79,7 @@ export function sortFilesByExplorer(files: TFile[], app?: App): TFile[] {
     const explorerPlugin = (app as any)?.internalPlugins?.getPluginById?.("file-explorer");
     const sortSetting = explorerPlugin?.instance?.sortOrder;
     if (sortSetting) {
-      let mappedOrder: SortOrder = "name-asc";
-      switch (sortSetting) {
-        case "alphabetical":
-          mappedOrder = "name-asc";
-          break;
-        case "alphabeticalReverse":
-          mappedOrder = "name-desc";
-          break;
-        case "byModifiedTime":
-          mappedOrder = "mtime-desc";
-          break;
-        case "byModifiedTimeReverse":
-          mappedOrder = "mtime-asc";
-          break;
-        case "byCreatedTime":
-          mappedOrder = "ctime-desc";
-          break;
-        case "byCreatedTimeReverse":
-          mappedOrder = "ctime-asc";
-          break;
-      }
+      const mappedOrder = mapObsidianSortOrder(sortSetting);
       return sortFiles(files, mappedOrder);
     }
   } catch (err) {

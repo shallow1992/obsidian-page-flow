@@ -17,3 +17,16 @@ export interface PageFlowSettings {
   loopFolder: boolean;
   thresholdPx: number;
 }
+
+export interface ScrollPhysicsOptions {
+  percentage?: number;
+  scrollPercentage?: number;
+  smooth?: boolean;
+  smoothScroll?: boolean;
+  duration?: number;
+  scrollDuration?: number;
+  threshold?: number;
+  thresholdPx?: number;
+  maxQueuedScreens?: number;
+  maxVelocityMultiplier?: number;
+}

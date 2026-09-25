@@ -1,4 +1,4 @@
-import { MarkdownView, Notice, Plugin } from "obsidian";
+import { MarkdownView, Notice, Plugin, TFile } from "obsidian";
 import { DEFAULT_SETTINGS, PageFlowSettingTab } from "./settings";
 import { PageFlowSettings } from "./types";
 import {
@@ -60,15 +60,7 @@ export default class PageFlowPlugin extends Plugin {
         if (!checking) {
           const container = getScrollContainer(view);
           if (container) {
-            scrollDown(
-              container,
-              this.settings.scrollPercentage,
-              this.settings.smoothScroll,
-              this.settings.thresholdPx,
-              this.settings.scrollDuration,
-              this.settings.maxQueuedScreens,
-              this.settings.maxVelocityMultiplier
-            );
+            scrollDown(container, this.settings);
           }
         }
         return true;
@@ -85,15 +77,7 @@ export default class PageFlowPlugin extends Plugin {
         if (!checking) {
           const container = getScrollContainer(view);
           if (container) {
-            scrollUp(
-              container,
-              this.settings.scrollPercentage,
-              this.settings.smoothScroll,
-              this.settings.thresholdPx,
-              this.settings.scrollDuration,
-              this.settings.maxQueuedScreens,
-              this.settings.maxVelocityMultiplier
-            );
+            scrollUp(container, this.settings);
           }
         }
         return true;
@@ -141,15 +125,7 @@ export default class PageFlowPlugin extends Plugin {
     const container = getScrollContainer(view);
     if (!container) return;
 
-    const scrolled = scrollDown(
-      container,
-      this.settings.scrollPercentage,
-      this.settings.smoothScroll,
-      this.settings.thresholdPx,
-      this.settings.scrollDuration,
-      this.settings.maxQueuedScreens,
-      this.settings.maxVelocityMultiplier
-    );
+    const scrolled = scrollDown(container, this.settings);
 
     if (!scrolled) {
       debugLog("handleForward: scrollDown returned false -> triggering openNextFile");
@@ -164,15 +140,7 @@ export default class PageFlowPlugin extends Plugin {
     const container = getScrollContainer(view);
     if (!container) return;
 
-    const scrolled = scrollUp(
-      container,
-      this.settings.scrollPercentage,
-      this.settings.smoothScroll,
-      this.settings.thresholdPx,
-      this.settings.scrollDuration,
-      this.settings.maxQueuedScreens,
-      this.settings.maxVelocityMultiplier
-    );
+    const scrolled = scrollUp(container, this.settings);
 
     if (!scrolled) {
       debugLog("handleBackward: scrollUp returned false -> triggering openPrevFile");
@@ -183,39 +151,31 @@ export default class PageFlowPlugin extends Plugin {
     }
   }
 
-  private async openNextFile(currentFile: any): Promise<void> {
+  private async openNextFile(currentFile: TFile): Promise<void> {
     const nextFile = resolveNextFile(currentFile, this.settings, this.app);
     if (!nextFile) {
       new Notice(t().notices.noNextFile);
       return;
     }
-
-    const leaf = this.app.workspace.getLeaf(false);
-    await leaf.openFile(nextFile);
-
-    // Ensure the new note starts from the top
-    window.requestAnimationFrame(() => {
-      const newView = this.app.workspace.getActiveViewOfType(MarkdownView);
-      if (newView) {
-        const newContainer = getScrollContainer(newView);
-        if (newContainer) {
-          scrollToTop(newContainer, false);
-        }
-      }
-    });
+    await this.switchToFile(nextFile, false);
   }
 
-  private async openPrevFile(currentFile: any, startAtBottom = false): Promise<void> {
+  private async openPrevFile(currentFile: TFile, startAtBottom = false): Promise<void> {
     const prevFile = resolvePrevFile(currentFile, this.settings, this.app);
     if (!prevFile) {
       new Notice(t().notices.noPrevFile);
       return;
     }
+    await this.switchToFile(prevFile, startAtBottom);
+  }
 
+  /**
+   * Helper: opens the target file and ensures proper scroll positioning (top or bottom).
+   */
+  private async switchToFile(targetFile: TFile, startAtBottom: boolean): Promise<void> {
     const leaf = this.app.workspace.getLeaf(false);
-    await leaf.openFile(prevFile);
+    await leaf.openFile(targetFile);
 
-    // If navigating backward, position at the bottom of the previous file
     window.requestAnimationFrame(() => {
       const newView = this.app.workspace.getActiveViewOfType(MarkdownView);
       if (newView) {

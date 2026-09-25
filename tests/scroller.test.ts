@@ -8,6 +8,9 @@ import {
   checkIsAtTop,
   easeInOutCubic,
   easeOutCubic,
+  scrollDown,
+  scrollUp,
+  stopActiveAnimation,
 } from "../src/scroller";
 
 describe("Scroller calculation logic", () => {
@@ -173,6 +176,47 @@ describe("Scroller calculation logic", () => {
       it("has rapid deceleration physics (progress 0.5 yields 0.875)", () => {
         expect(easeOutCubic(0.5)).toBe(0.875);
       });
+    });
+  });
+
+  describe("ScrollPhysicsOptions support", () => {
+    it("accepts options object in scrollDown", () => {
+      const mockContainer = {
+        scrollTop: 0,
+        clientHeight: 800,
+        scrollHeight: 2000,
+      } as HTMLElement;
+
+      const result = scrollDown(mockContainer, {
+        percentage: 85,
+        smooth: false,
+        threshold: 10,
+      });
+
+      expect(result).toBe(true);
+      expect(mockContainer.scrollTop).toBe(680);
+    });
+
+    it("accepts options object in scrollUp", () => {
+      const mockContainer = {
+        scrollTop: 680,
+        clientHeight: 800,
+        scrollHeight: 2000,
+      } as HTMLElement;
+
+      const result = scrollUp(mockContainer, {
+        percentage: 50,
+        smooth: false,
+        threshold: 10,
+      });
+
+      expect(result).toBe(true);
+      expect(mockContainer.scrollTop).toBe(280);
+    });
+
+    it("safely handles stopActiveAnimation when no animation is active", () => {
+      const mockContainer = {} as HTMLElement;
+      expect(() => stopActiveAnimation(mockContainer)).not.toThrow();
     });
   });
 });

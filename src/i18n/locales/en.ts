@@ -55,10 +55,16 @@ export const en = {
       name: "Boundary threshold (px)",
       desc: "Buffer in pixels to detect when the top or bottom of a note has been reached.",
     },
+    resetToDefaults: {
+      name: "Reset to default settings",
+      desc: "Reset all settings back to their default values.",
+      buttonText: "Reset to defaults",
+    },
   },
   notices: {
     noNextFile: "No next file in folder",
     noPrevFile: "No previous file in folder",
+    settingsReset: "Page Flow settings reset to defaults",
   },
 };
 

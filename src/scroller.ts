@@ -1,5 +1,6 @@
 import { MarkdownView } from "obsidian";
 import { debugLog } from "./logger";
+import { ScrollPhysicsOptions } from "./types";
 
 /**
  * Pure calculation helper: checks whether the container scroll is at the bottom.
@@ -103,6 +104,17 @@ interface ActiveScrollAnimation {
 const activeAnimations = new WeakMap<HTMLElement, ActiveScrollAnimation>();
 
 /**
+ * Safely stops and removes any active scroll animation running on the container.
+ */
+export function stopActiveAnimation(container: HTMLElement): void {
+  const existing = activeAnimations.get(container);
+  if (existing) {
+    cancelAnimationFrame(existing.frameId);
+    activeAnimations.delete(container);
+  }
+}
+
+/**
  * Natural smooth scroll with continuous momentum physics and CodeMirror layout-shift resistance.
  * Preserves velocity across rapid key presses, dynamically scaling both velocity and target distance.
  * Holds brake during rapid chaining to maintain cruising momentum until key inputs cease.
@@ -151,10 +163,7 @@ export function smoothScrollBy(
       `smoothScrollBy: Already at target. clampedTarget=${clampedTarget}, currentScroll=${currentScroll}`
     );
     container.scrollTop = clampedTarget;
-    if (existing) {
-      cancelAnimationFrame(existing.frameId);
-      activeAnimations.delete(container);
-    }
+    stopActiveAnimation(container);
     return;
   }
 
@@ -312,23 +321,46 @@ export function getScrollContainer(view: MarkdownView): HTMLElement | null {
  * Scrolls the container downward by the configured percentage.
  * Uses smart queuing smooth scroll with dynamic chained acceleration to resist CodeMirror 6 layout shifts.
  */
+/**
+ * Scrolls the container downward by the configured percentage or options.
+ * Uses smart queuing smooth scroll with dynamic chained acceleration to resist CodeMirror 6 layout shifts.
+ */
 export function scrollDown(
   container: HTMLElement,
-  percentage: number,
-  smooth: boolean,
+  percentageOrOptions: number | ScrollPhysicsOptions,
+  smooth = true,
   threshold = 10,
   duration = 280,
   maxQueuedScreens = 5.0,
   maxVelocityMultiplier = 2.2
 ): boolean {
+  const opts: ScrollPhysicsOptions =
+    typeof percentageOrOptions === "object"
+      ? percentageOrOptions
+      : {
+          percentage: percentageOrOptions,
+          smooth,
+          threshold,
+          duration,
+          maxQueuedScreens,
+          maxVelocityMultiplier,
+        };
+
+  const percentage = opts.scrollPercentage ?? opts.percentage ?? 85;
+  const isSmooth = opts.smoothScroll ?? opts.smooth ?? true;
+  const boundaryThreshold = opts.thresholdPx ?? opts.threshold ?? 10;
+  const scrollDuration = opts.scrollDuration ?? opts.duration ?? 280;
+  const queuedScreens = opts.maxQueuedScreens ?? 5.0;
+  const velocityMultiplier = opts.maxVelocityMultiplier ?? 2.2;
+
   const existing = activeAnimations.get(container);
   const currentOrTargetScrollTop = existing ? existing.targetScrollTop : container.scrollTop;
   const clientHeight = container.clientHeight;
   const scrollHeight = container.scrollHeight;
 
-  if (checkIsAtBottom(currentOrTargetScrollTop, clientHeight, scrollHeight, threshold)) {
+  if (checkIsAtBottom(currentOrTargetScrollTop, clientHeight, scrollHeight, boundaryThreshold)) {
     // If target reached bottom but visible scroll is still catching up, let it finish scrolling!
-    if (existing && !checkIsAtBottom(container.scrollTop, clientHeight, scrollHeight, threshold)) {
+    if (existing && !checkIsAtBottom(container.scrollTop, clientHeight, scrollHeight, boundaryThreshold)) {
       debugLog(
         `scrollDown: target at bottom, but container still visibly scrolling. ` +
         `scrollTop=${container.scrollTop.toFixed(1)}, target=${existing.targetScrollTop.toFixed(1)}`
@@ -337,20 +369,20 @@ export function scrollDown(
     }
     debugLog(
       `scrollDown blocked: checkIsAtBottom=true. ` +
-      `currentOrTargetScrollTop=${currentOrTargetScrollTop.toFixed(1)}, clientHeight=${clientHeight}, scrollHeight=${scrollHeight}, threshold=${threshold}`
+      `currentOrTargetScrollTop=${currentOrTargetScrollTop.toFixed(1)}, clientHeight=${clientHeight}, scrollHeight=${scrollHeight}, threshold=${boundaryThreshold}`
     );
     return false;
   }
 
   const delta = calculateScrollDelta(clientHeight, percentage);
 
-  if (smooth) {
+  if (isSmooth) {
     smoothScrollBy(
       container,
       delta,
-      duration,
-      maxQueuedScreens,
-      maxVelocityMultiplier
+      scrollDuration,
+      queuedScreens,
+      velocityMultiplier
     );
   } else {
     container.scrollTop = Math.min(
@@ -363,24 +395,43 @@ export function scrollDown(
 }
 
 /**
- * Scrolls the container upward by the configured percentage.
+ * Scrolls the container upward by the configured percentage or options.
  */
 export function scrollUp(
   container: HTMLElement,
-  percentage: number,
-  smooth: boolean,
+  percentageOrOptions: number | ScrollPhysicsOptions,
+  smooth = true,
   threshold = 10,
   duration = 280,
   maxQueuedScreens = 5.0,
   maxVelocityMultiplier = 2.2
 ): boolean {
+  const opts: ScrollPhysicsOptions =
+    typeof percentageOrOptions === "object"
+      ? percentageOrOptions
+      : {
+          percentage: percentageOrOptions,
+          smooth,
+          threshold,
+          duration,
+          maxQueuedScreens,
+          maxVelocityMultiplier,
+        };
+
+  const percentage = opts.scrollPercentage ?? opts.percentage ?? 85;
+  const isSmooth = opts.smoothScroll ?? opts.smooth ?? true;
+  const boundaryThreshold = opts.thresholdPx ?? opts.threshold ?? 10;
+  const scrollDuration = opts.scrollDuration ?? opts.duration ?? 280;
+  const queuedScreens = opts.maxQueuedScreens ?? 5.0;
+  const velocityMultiplier = opts.maxVelocityMultiplier ?? 2.2;
+
   const existing = activeAnimations.get(container);
   const currentOrTargetScrollTop = existing ? existing.targetScrollTop : container.scrollTop;
   const clientHeight = container.clientHeight;
 
-  if (checkIsAtTop(currentOrTargetScrollTop, threshold)) {
+  if (checkIsAtTop(currentOrTargetScrollTop, boundaryThreshold)) {
     // If target reached top but visible scroll is still catching up, let it finish scrolling!
-    if (existing && !checkIsAtTop(container.scrollTop, threshold)) {
+    if (existing && !checkIsAtTop(container.scrollTop, boundaryThreshold)) {
       debugLog(
         `scrollUp: target at top, but container still visibly scrolling. ` +
         `scrollTop=${container.scrollTop.toFixed(1)}, target=${existing.targetScrollTop.toFixed(1)}`
@@ -389,20 +440,20 @@ export function scrollUp(
     }
     debugLog(
       `scrollUp blocked: checkIsAtTop=true. ` +
-      `currentOrTargetScrollTop=${currentOrTargetScrollTop.toFixed(1)}, threshold=${threshold}`
+      `currentOrTargetScrollTop=${currentOrTargetScrollTop.toFixed(1)}, threshold=${boundaryThreshold}`
     );
     return false;
   }
 
   const delta = calculateScrollDelta(clientHeight, percentage);
 
-  if (smooth) {
+  if (isSmooth) {
     smoothScrollBy(
       container,
       -delta,
-      duration,
-      maxQueuedScreens,
-      maxVelocityMultiplier
+      scrollDuration,
+      queuedScreens,
+      velocityMultiplier
     );
   } else {
     container.scrollTop = Math.max(0, container.scrollTop - delta);
@@ -419,11 +470,7 @@ export function scrollToTop(
   smooth = false,
   duration = 280
 ): void {
-  const existing = activeAnimations.get(container);
-  if (existing) {
-    cancelAnimationFrame(existing.frameId);
-    activeAnimations.delete(container);
-  }
+  stopActiveAnimation(container);
 
   if (smooth) {
     smoothScrollBy(container, -container.scrollTop, duration);
@@ -440,11 +487,7 @@ export function scrollToBottom(
   smooth = false,
   duration = 280
 ): void {
-  const existing = activeAnimations.get(container);
-  if (existing) {
-    cancelAnimationFrame(existing.frameId);
-    activeAnimations.delete(container);
-  }
+  stopActiveAnimation(container);
 
   const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
   if (smooth) {
