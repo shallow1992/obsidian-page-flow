@@ -65,7 +65,9 @@ export default class PageFlowPlugin extends Plugin {
               this.settings.scrollPercentage,
               this.settings.smoothScroll,
               this.settings.thresholdPx,
-              this.settings.scrollDuration
+              this.settings.scrollDuration,
+              this.settings.maxQueuedScreens,
+              this.settings.maxVelocityMultiplier
             );
           }
         }
@@ -88,7 +90,9 @@ export default class PageFlowPlugin extends Plugin {
               this.settings.scrollPercentage,
               this.settings.smoothScroll,
               this.settings.thresholdPx,
-              this.settings.scrollDuration
+              this.settings.scrollDuration,
+              this.settings.maxQueuedScreens,
+              this.settings.maxVelocityMultiplier
             );
           }
         }
@@ -142,7 +146,9 @@ export default class PageFlowPlugin extends Plugin {
       this.settings.scrollPercentage,
       this.settings.smoothScroll,
       this.settings.thresholdPx,
-      this.settings.scrollDuration
+      this.settings.scrollDuration,
+      this.settings.maxQueuedScreens,
+      this.settings.maxVelocityMultiplier
     );
 
     if (!scrolled) {
@@ -163,7 +169,9 @@ export default class PageFlowPlugin extends Plugin {
       this.settings.scrollPercentage,
       this.settings.smoothScroll,
       this.settings.thresholdPx,
-      this.settings.scrollDuration
+      this.settings.scrollDuration,
+      this.settings.maxQueuedScreens,
+      this.settings.maxVelocityMultiplier
     );
 
     if (!scrolled) {
@@ -176,7 +184,7 @@ export default class PageFlowPlugin extends Plugin {
   }
 
   private async openNextFile(currentFile: any): Promise<void> {
-    const nextFile = resolveNextFile(currentFile, this.settings);
+    const nextFile = resolveNextFile(currentFile, this.settings, this.app);
     if (!nextFile) {
       new Notice(t().notices.noNextFile);
       return;
@@ -198,7 +206,7 @@ export default class PageFlowPlugin extends Plugin {
   }
 
   private async openPrevFile(currentFile: any, startAtBottom = false): Promise<void> {
-    const prevFile = resolvePrevFile(currentFile, this.settings);
+    const prevFile = resolvePrevFile(currentFile, this.settings, this.app);
     if (!prevFile) {
       new Notice(t().notices.noPrevFile);
       return;

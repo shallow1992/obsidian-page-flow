@@ -43,6 +43,92 @@ describe("Navigator file sorting and resolution", () => {
       const sorted = sortFiles(files, "mtime-desc");
       expect(sorted.map((f) => f.basename)).toEqual(["A_Note", "B_Note", "C_Note"]);
     });
+
+    describe("file-explorer sort order", () => {
+      it("falls back to name-asc when app is undefined", () => {
+        const sorted = sortFiles(files, "file-explorer");
+        expect(sorted.map((f) => f.basename)).toEqual(["A_Note", "B_Note", "C_Note"]);
+      });
+
+      it("sorts according to visual DOM order when file-explorer view is present", () => {
+        const mockDomElements = [
+          { getAttribute: (attr: string) => (attr === "data-path" ? "C_Note.md" : null) },
+          { getAttribute: (attr: string) => (attr === "data-path" ? "A_Note.md" : null) },
+          { getAttribute: (attr: string) => (attr === "data-path" ? "B_Note.md" : null) },
+        ];
+
+        const mockApp = {
+          workspace: {
+            getLeavesOfType: (type: string) => {
+              if (type === "file-explorer") {
+                return [
+                  {
+                    view: {
+                      containerEl: {
+                        querySelectorAll: (selector: string) =>
+                          selector === "[data-path]" ? mockDomElements : [],
+                      },
+                    },
+                  },
+                ];
+              }
+              return [];
+            },
+          },
+        } as any;
+
+        const sorted = sortFiles(files, "file-explorer", mockApp);
+        expect(sorted.map((f) => f.basename)).toEqual(["C_Note", "A_Note", "B_Note"]);
+      });
+
+      it("places files not in DOM at the end sorted by name-asc", () => {
+        // Only B_Note is in the DOM
+        const mockDomElements = [
+          { getAttribute: (attr: string) => (attr === "data-path" ? "B_Note.md" : null) },
+        ];
+
+        const mockApp = {
+          workspace: {
+            getLeavesOfType: (type: string) => [
+              {
+                view: {
+                  containerEl: {
+                    querySelectorAll: () => mockDomElements,
+                  },
+                },
+              },
+            ],
+          },
+        } as any;
+
+        const sorted = sortFiles(files, "file-explorer", mockApp);
+        // B_Note first, then A_Note and C_Note sorted by name-asc
+        expect(sorted.map((f) => f.basename)).toEqual(["B_Note", "A_Note", "C_Note"]);
+      });
+
+      it("falls back to internal file-explorer sortOrder setting if DOM elements are missing", () => {
+        const mockApp = {
+          workspace: {
+            getLeavesOfType: () => [],
+          },
+          internalPlugins: {
+            getPluginById: (id: string) => {
+              if (id === "file-explorer") {
+                return {
+                  instance: {
+                    sortOrder: "alphabeticalReverse",
+                  },
+                };
+              }
+              return null;
+            },
+          },
+        } as any;
+
+        const sorted = sortFiles(files, "file-explorer", mockApp);
+        expect(sorted.map((f) => f.basename)).toEqual(["C_Note", "B_Note", "A_Note"]);
+      });
+    });
   });
 
   describe("findNextFile", () => {

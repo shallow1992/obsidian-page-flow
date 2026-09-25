@@ -26,10 +26,19 @@ export const en = {
       name: "Scroll animation duration (ms)",
       desc: "Base duration of the smooth scroll animation in milliseconds (default: 280ms). Rapid key presses automatically accelerate for swift navigation.",
     },
+    maxQueuedScreens: {
+      name: "Maximum queued scroll (screens)",
+      desc: "Maximum screens to queue ahead during rapid presses. At 85% scroll, 5 screens equals about 6 key presses.",
+    },
+    maxVelocityMultiplier: {
+      name: "Maximum acceleration multiplier",
+      desc: "Maximum speed multiplier for rapid presses. Higher values accelerate faster.",
+    },
     sortOrder: {
       name: "File sort order",
-      desc: "The ordering rule used when navigating to the next or previous file in a folder.",
+      desc: "Order for navigating folder files. 'File explorer order' follows the sidebar layout.",
       options: {
+        fileExplorer: "File explorer order (Recommended)",
         nameAsc: "File name (A to Z)",
         nameDesc: "File name (Z to A)",
         ctimeDesc: "Created date (Newest first)",

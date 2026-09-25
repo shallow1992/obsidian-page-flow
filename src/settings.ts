@@ -7,7 +7,9 @@ export const DEFAULT_SETTINGS: PageFlowSettings = {
   scrollPercentage: 85,
   smoothScroll: true,
   scrollDuration: 280,
-  sortOrder: "name-asc",
+  maxQueuedScreens: 5.0,
+  maxVelocityMultiplier: 2.2,
+  sortOrder: "file-explorer",
   loopFolder: false,
   thresholdPx: 10,
 };
@@ -111,10 +113,39 @@ export class PageFlowSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName(strings.maxQueuedScreens.name)
+      .setDesc(strings.maxQueuedScreens.desc)
+      .addSlider((slider) =>
+        slider
+          .setLimits(1.0, 15.0, 0.5)
+          .setValue(this.plugin.settings.maxQueuedScreens ?? 5.0)
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            this.plugin.settings.maxQueuedScreens = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName(strings.maxVelocityMultiplier.name)
+      .setDesc(strings.maxVelocityMultiplier.desc)
+      .addSlider((slider) =>
+        slider
+          .setLimits(1.0, 4.0, 0.1)
+          .setValue(this.plugin.settings.maxVelocityMultiplier ?? 2.2)
+          .setDynamicTooltip()
+          .onChange(async (value) => {
+            this.plugin.settings.maxVelocityMultiplier = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
       .setName(strings.sortOrder.name)
       .setDesc(strings.sortOrder.desc)
       .addDropdown((dropdown) =>
         dropdown
+          .addOption("file-explorer", strings.sortOrder.options.fileExplorer)
           .addOption("name-asc", strings.sortOrder.options.nameAsc)
           .addOption("name-desc", strings.sortOrder.options.nameDesc)
           .addOption("ctime-desc", strings.sortOrder.options.ctimeDesc)

@@ -2,9 +2,100 @@ import { App, TFile, TFolder } from "obsidian";
 import { PageFlowSettings, SortOrder } from "./types";
 
 /**
+ * Sorts files according to the visual DOM order in Obsidian's File Explorer.
+ * Falls back to Obsidian's file explorer sortOrder setting, or name-asc if unavailable.
+ */
+export function sortFilesByExplorer(files: TFile[], app?: App): TFile[] {
+  if (!app || files.length <= 1) {
+    return sortFiles(files, "name-asc");
+  }
+
+  // 1. Try to read visual DOM order from File Explorer view
+  try {
+    const leaves = app.workspace.getLeavesOfType("file-explorer");
+    if (leaves.length > 0) {
+      const explorerView = leaves[0].view;
+      if (explorerView && explorerView.containerEl) {
+        const pathElements = explorerView.containerEl.querySelectorAll("[data-path]");
+        if (pathElements.length > 0) {
+          const domPaths: string[] = [];
+          pathElements.forEach((el) => {
+            const p = el.getAttribute("data-path");
+            if (p) domPaths.push(p);
+          });
+
+          const fileMap = new Map<string, TFile>();
+          for (const f of files) {
+            fileMap.set(f.path, f);
+          }
+
+          const ordered: TFile[] = [];
+          for (const p of domPaths) {
+            const f = fileMap.get(p);
+            if (f) {
+              ordered.push(f);
+              fileMap.delete(p);
+            }
+          }
+
+          if (ordered.length > 0) {
+            if (fileMap.size > 0) {
+              const remaining = sortFiles(Array.from(fileMap.values()), "name-asc");
+              ordered.push(...remaining);
+            }
+            return ordered;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    // Fall back to setting or name-asc
+  }
+
+  // 2. Fallback: check Obsidian's internal file explorer sortOrder setting
+  try {
+    const explorerPlugin = (app as any)?.internalPlugins?.getPluginById?.("file-explorer");
+    const sortSetting = explorerPlugin?.instance?.sortOrder;
+    if (sortSetting) {
+      let mappedOrder: SortOrder = "name-asc";
+      switch (sortSetting) {
+        case "alphabetical":
+          mappedOrder = "name-asc";
+          break;
+        case "alphabeticalReverse":
+          mappedOrder = "name-desc";
+          break;
+        case "byModifiedTime":
+          mappedOrder = "mtime-desc";
+          break;
+        case "byModifiedTimeReverse":
+          mappedOrder = "mtime-asc";
+          break;
+        case "byCreatedTime":
+          mappedOrder = "ctime-desc";
+          break;
+        case "byCreatedTimeReverse":
+          mappedOrder = "ctime-asc";
+          break;
+      }
+      return sortFiles(files, mappedOrder);
+    }
+  } catch (err) {
+    // Fallback to name-asc
+  }
+
+  // 3. Fallback to name-asc
+  return sortFiles(files, "name-asc");
+}
+
+/**
  * Pure helper: sorts an array of TFiles based on the specified sort order.
  */
-export function sortFiles(files: TFile[], sortOrder: SortOrder): TFile[] {
+export function sortFiles(files: TFile[], sortOrder: SortOrder, app?: App): TFile[] {
+  if (sortOrder === "file-explorer") {
+    return sortFilesByExplorer(files, app);
+  }
+
   const sorted = [...files];
 
   sorted.sort((a, b) => {
@@ -94,10 +185,11 @@ export function getFolderMarkdownFiles(file: TFile): TFile[] {
  */
 export function resolveNextFile(
   currentFile: TFile,
-  settings: PageFlowSettings
+  settings: PageFlowSettings,
+  app?: App
 ): TFile | null {
   const folderFiles = getFolderMarkdownFiles(currentFile);
-  const sorted = sortFiles(folderFiles, settings.sortOrder);
+  const sorted = sortFiles(folderFiles, settings.sortOrder, app);
   return findNextFile(sorted, currentFile, settings.loopFolder);
 }
 
@@ -106,9 +198,10 @@ export function resolveNextFile(
  */
 export function resolvePrevFile(
   currentFile: TFile,
-  settings: PageFlowSettings
+  settings: PageFlowSettings,
+  app?: App
 ): TFile | null {
   const folderFiles = getFolderMarkdownFiles(currentFile);
-  const sorted = sortFiles(folderFiles, settings.sortOrder);
+  const sorted = sortFiles(folderFiles, settings.sortOrder, app);
   return findPrevFile(sorted, currentFile, settings.loopFolder);
 }

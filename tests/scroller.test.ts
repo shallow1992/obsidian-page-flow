@@ -82,6 +82,14 @@ describe("Scroller calculation logic", () => {
       expect(calculateTargetVelocity(600, 600, 4)).toBeCloseTo(base * 2.20);
       expect(calculateTargetVelocity(600, 600, 10)).toBeCloseTo(base * 2.20);
     });
+
+    it("respects custom maxMultiplier parameter", () => {
+      const base = calculateTargetVelocity(600, 600, 0);
+      // with maxMultiplier = 3.5
+      expect(calculateTargetVelocity(600, 600, 10, 3.5)).toBeCloseTo(base * 3.5);
+      // with maxMultiplier = 1.5
+      expect(calculateTargetVelocity(600, 600, 10, 1.5)).toBeCloseTo(base * 1.5);
+    });
   });
 
   describe("calculateVelocityMultiplier", () => {
@@ -96,9 +104,16 @@ describe("Scroller calculation logic", () => {
       expect(calculateVelocityMultiplier(4)).toBeCloseTo(2.20);
     });
 
-    it("caps at 2.20 for chainCount > 4", () => {
+    it("caps at 2.20 for chainCount > 4 by default", () => {
       expect(calculateVelocityMultiplier(5)).toBeCloseTo(2.20);
       expect(calculateVelocityMultiplier(10)).toBeCloseTo(2.20);
+    });
+
+    it("respects custom maxMultiplier", () => {
+      expect(calculateVelocityMultiplier(10, 3.5)).toBeCloseTo(3.5);
+      expect(calculateVelocityMultiplier(10, 1.3)).toBeCloseTo(1.3);
+      // chain 1 (1.30) with max 1.20 should cap at 1.20
+      expect(calculateVelocityMultiplier(1, 1.2)).toBeCloseTo(1.2);
     });
   });
 

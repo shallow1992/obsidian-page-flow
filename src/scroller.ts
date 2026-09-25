@@ -32,27 +32,28 @@ export function calculateScrollDelta(clientHeight: number, percentage: number): 
 }
 
 /**
- * Pure calculation helper: calculates velocity multiplier based on chainCount.
- * Multipliers: 1.0x (1st) -> 1.30x (2nd) -> 1.60x (3rd) -> 1.90x (4th) -> 2.20x (5th+).
+ * Pure calculation helper: calculates velocity multiplier based on chainCount and maxMultiplier.
+ * Multipliers: 1.0x (1st) -> step-based increase up to maxMultiplier (default: 2.20x).
  */
-export function calculateVelocityMultiplier(chainCount: number): number {
-  return 1 + Math.min(chainCount, 4) * 0.30;
+export function calculateVelocityMultiplier(chainCount: number, maxMultiplier = 2.2): number {
+  const clampedMax = Math.max(1.0, maxMultiplier);
+  return Math.min(clampedMax, 1 + chainCount * 0.30);
 }
 
 /**
  * Pure calculation helper: calculates maximum velocity for smooth scrolling.
- * Scales velocity under rapid consecutive key presses (chainCount).
- * Base velocity: Math.abs(delta) / baseDuration (px/ms).
- * Multipliers: 1.0x (1st) -> 1.30x (2nd) -> 1.60x (3rd) -> 1.90x (4th) -> 2.20x (5th+).
+ * Scales velocity under rapid consecutive key presses (chainCount) up to maxMultiplier.
+ * Base velocity: Math.abs(delta) / safeDuration (px/ms).
  */
 export function calculateTargetVelocity(
   delta: number,
   baseDuration: number,
-  chainCount: number
+  chainCount: number,
+  maxMultiplier = 2.2
 ): number {
   const safeDuration = Math.max(50, baseDuration);
   const baseVelocity = Math.abs(delta) / safeDuration;
-  return baseVelocity * calculateVelocityMultiplier(chainCount);
+  return baseVelocity * calculateVelocityMultiplier(chainCount, maxMultiplier);
 }
 
 /**
@@ -96,6 +97,7 @@ interface ActiveScrollAnimation {
   frameId: number;
   delta: number;
   duration: number;
+  maxVelocityMultiplier: number;
 }
 
 const activeAnimations = new WeakMap<HTMLElement, ActiveScrollAnimation>();
@@ -108,11 +110,13 @@ const activeAnimations = new WeakMap<HTMLElement, ActiveScrollAnimation>();
 export function smoothScrollBy(
   container: HTMLElement,
   delta: number,
-  duration = 280
+  duration = 280,
+  maxQueuedScreens = 5.0,
+  maxVelocityMultiplier = 2.2
 ): void {
   const clientHeight = container.clientHeight;
   const maxScroll = Math.max(0, container.scrollHeight - clientHeight);
-  const maxQueuedDistance = clientHeight * 5.0;
+  const maxQueuedDistance = clientHeight * Math.max(1.0, maxQueuedScreens);
 
   const existing = activeAnimations.get(container);
   const currentScroll = container.scrollTop;
@@ -123,7 +127,7 @@ export function smoothScrollBy(
 
   if (existing) {
     nextChainCount = existing.chainCount + 1;
-    const multiplier = calculateVelocityMultiplier(nextChainCount);
+    const multiplier = calculateVelocityMultiplier(nextChainCount, maxVelocityMultiplier);
     effectiveDelta = Math.round(delta * multiplier);
   }
 
@@ -161,6 +165,7 @@ export function smoothScrollBy(
     existing.lastInputTime = now;
     existing.delta = delta;
     existing.duration = duration;
+    existing.maxVelocityMultiplier = maxVelocityMultiplier;
     debugLog(
       `Key pressed (chain extended): chainCount=${existing.chainCount}, ` +
       `effectiveDelta=${effectiveDelta}, currentScroll=${currentScroll.toFixed(1)}, ` +
@@ -181,6 +186,7 @@ export function smoothScrollBy(
     frameId: 0,
     delta,
     duration,
+    maxVelocityMultiplier,
   };
 
   debugLog(
@@ -226,7 +232,8 @@ export function smoothScrollBy(
     const maxVelocity = calculateTargetVelocity(
       currentAnim.delta,
       currentAnim.duration,
-      currentAnim.chainCount
+      currentAnim.chainCount,
+      currentAnim.maxVelocityMultiplier
     );
 
     // Deceleration zone: natural ease-out brake near the target ONLY when user is not actively chaining
@@ -310,7 +317,9 @@ export function scrollDown(
   percentage: number,
   smooth: boolean,
   threshold = 10,
-  duration = 280
+  duration = 280,
+  maxQueuedScreens = 5.0,
+  maxVelocityMultiplier = 2.2
 ): boolean {
   const existing = activeAnimations.get(container);
   const currentOrTargetScrollTop = existing ? existing.targetScrollTop : container.scrollTop;
@@ -336,7 +345,13 @@ export function scrollDown(
   const delta = calculateScrollDelta(clientHeight, percentage);
 
   if (smooth) {
-    smoothScrollBy(container, delta, duration);
+    smoothScrollBy(
+      container,
+      delta,
+      duration,
+      maxQueuedScreens,
+      maxVelocityMultiplier
+    );
   } else {
     container.scrollTop = Math.min(
       scrollHeight - clientHeight,
@@ -355,7 +370,9 @@ export function scrollUp(
   percentage: number,
   smooth: boolean,
   threshold = 10,
-  duration = 280
+  duration = 280,
+  maxQueuedScreens = 5.0,
+  maxVelocityMultiplier = 2.2
 ): boolean {
   const existing = activeAnimations.get(container);
   const currentOrTargetScrollTop = existing ? existing.targetScrollTop : container.scrollTop;
@@ -380,7 +397,13 @@ export function scrollUp(
   const delta = calculateScrollDelta(clientHeight, percentage);
 
   if (smooth) {
-    smoothScrollBy(container, -delta, duration);
+    smoothScrollBy(
+      container,
+      -delta,
+      duration,
+      maxQueuedScreens,
+      maxVelocityMultiplier
+    );
   } else {
     container.scrollTop = Math.max(0, container.scrollTop - delta);
   }
