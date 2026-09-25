@@ -5,20 +5,20 @@ export type { TranslationStrings };
 
 export function getLanguage(): string {
   try {
-    if (typeof window !== "undefined" && window.localStorage) {
-      const stored = window.localStorage.getItem("language");
-      if (stored) {
-        return stored.toLowerCase();
-      }
-    }
     if (typeof (window as any)?.moment?.locale === "function") {
       const loc = (window as any).moment.locale();
       if (loc) {
         return loc.toLowerCase();
       }
     }
+    if (typeof (globalThis as any)?.moment?.locale === "function") {
+      const loc = (globalThis as any).moment.locale();
+      if (loc) {
+        return loc.toLowerCase();
+      }
+    }
   } catch {
-    // Fallback if localStorage or moment is inaccessible
+    // Fallback if moment is inaccessible
   }
   return "en";
 }
