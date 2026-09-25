@@ -1,11 +1,15 @@
-import { App, Platform, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
 import type PageFlowPlugin from "./main";
 import { PageFlowSettings, SortOrder } from "./types";
+import { t } from "./i18n";
 
 export const DEFAULT_SETTINGS: PageFlowSettings = {
   scrollPercentage: 85,
   smoothScroll: true,
-  sortOrder: "name-asc",
+  scrollDuration: 280,
+  maxQueuedScreens: 5.0,
+  maxVelocityMultiplier: 2.2,
+  sortOrder: "file-explorer",
   loopFolder: false,
   thresholdPx: 10,
 };
@@ -21,19 +25,18 @@ export class PageFlowSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
+    const strings = t().settings;
 
-    containerEl.createEl("h2", { text: "Page Flow Settings" });
+    containerEl.createEl("h2", { text: strings.title });
 
     // Quick jump to Hotkeys settings (Desktop only, as mobile does not have a hotkeys settings tab)
     if (!Platform.isMobile) {
       new Setting(containerEl)
-        .setName("Configure hotkeys")
-        .setDesc(
-          "Open Obsidian's hotkey settings filtered for Page Flow commands, or manually search 'Page Flow' in Settings > Hotkeys."
-        )
+        .setName(strings.configureHotkeys.name)
+        .setDesc(strings.configureHotkeys.desc)
         .addButton((button) =>
           button
-            .setButtonText("Configure hotkeys")
+            .setButtonText(strings.configureHotkeys.buttonText)
             .setCta()
             .onClick(() => {
               try {
@@ -69,23 +72,21 @@ export class PageFlowSettingTab extends PluginSettingTab {
         );
     }
 
-    new Setting(containerEl)
-      .setName("Scroll amount (%)")
-      .setDesc("Percentage of the screen height to scroll on each step (recommended: 80-90%).")
-      .addSlider((slider) =>
-        slider
-          .setLimits(50, 100, 5)
-          .setValue(this.plugin.settings.scrollPercentage)
-          .setDynamicTooltip()
-          .onChange(async (value) => {
-            this.plugin.settings.scrollPercentage = value;
-            await this.plugin.saveSettings();
-          })
-      );
+    this.addNumericSlider(
+      containerEl,
+      strings.scrollAmount.name,
+      strings.scrollAmount.desc,
+      { min: 50, max: 100, step: 5 },
+      this.plugin.settings.scrollPercentage,
+      async (val) => {
+        this.plugin.settings.scrollPercentage = val;
+        await this.plugin.saveSettings();
+      }
+    );
 
     new Setting(containerEl)
-      .setName("Smooth scrolling")
-      .setDesc("Animate scrolling smoothly between page steps.")
+      .setName(strings.smoothScroll.name)
+      .setDesc(strings.smoothScroll.desc)
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.smoothScroll)
@@ -95,17 +96,56 @@ export class PageFlowSettingTab extends PluginSettingTab {
           })
       );
 
+    this.addNumericSlider(
+      containerEl,
+      strings.scrollDuration.name,
+      strings.scrollDuration.desc,
+      { min: 100, max: 1000, step: 20 },
+      this.plugin.settings.scrollDuration,
+      async (val) => {
+        this.plugin.settings.scrollDuration = val;
+        await this.plugin.saveSettings();
+      }
+    );
+
+    this.addNumericSlider(
+      containerEl,
+      strings.maxQueuedScreens.name,
+      strings.maxQueuedScreens.desc,
+      { min: 1.0, max: 15.0, step: 0.5 },
+      this.plugin.settings.maxQueuedScreens ?? 5.0,
+      async (val) => {
+        this.plugin.settings.maxQueuedScreens = val;
+        await this.plugin.saveSettings();
+      },
+      1
+    );
+
+    this.addNumericSlider(
+      containerEl,
+      strings.maxVelocityMultiplier.name,
+      strings.maxVelocityMultiplier.desc,
+      { min: 1.0, max: 5.0, step: 0.1 },
+      this.plugin.settings.maxVelocityMultiplier ?? 2.2,
+      async (val) => {
+        this.plugin.settings.maxVelocityMultiplier = val;
+        await this.plugin.saveSettings();
+      },
+      1
+    );
+
     new Setting(containerEl)
-      .setName("File sort order")
-      .setDesc("The ordering rule used when navigating to the next or previous file in a folder.")
+      .setName(strings.sortOrder.name)
+      .setDesc(strings.sortOrder.desc)
       .addDropdown((dropdown) =>
         dropdown
-          .addOption("name-asc", "File name (A to Z)")
-          .addOption("name-desc", "File name (Z to A)")
-          .addOption("ctime-desc", "Created date (Newest first)")
-          .addOption("ctime-asc", "Created date (Oldest first)")
-          .addOption("mtime-desc", "Modified date (Newest first)")
-          .addOption("mtime-asc", "Modified date (Oldest first)")
+          .addOption("file-explorer", strings.sortOrder.options.fileExplorer)
+          .addOption("name-asc", strings.sortOrder.options.nameAsc)
+          .addOption("name-desc", strings.sortOrder.options.nameDesc)
+          .addOption("ctime-desc", strings.sortOrder.options.ctimeDesc)
+          .addOption("ctime-asc", strings.sortOrder.options.ctimeAsc)
+          .addOption("mtime-desc", strings.sortOrder.options.mtimeDesc)
+          .addOption("mtime-asc", strings.sortOrder.options.mtimeAsc)
           .setValue(this.plugin.settings.sortOrder)
           .onChange(async (value) => {
             this.plugin.settings.sortOrder = value as SortOrder;
@@ -114,8 +154,8 @@ export class PageFlowSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Loop folder navigation")
-      .setDesc("When reaching the last file in a folder, cycle back to the first file.")
+      .setName(strings.loopFolder.name)
+      .setDesc(strings.loopFolder.desc)
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.loopFolder)
@@ -125,18 +165,63 @@ export class PageFlowSettingTab extends PluginSettingTab {
           })
       );
 
+    this.addNumericSlider(
+      containerEl,
+      strings.boundaryThreshold.name,
+      strings.boundaryThreshold.desc,
+      { min: 0, max: 50, step: 5 },
+      this.plugin.settings.thresholdPx,
+      async (val) => {
+        this.plugin.settings.thresholdPx = val;
+        await this.plugin.saveSettings();
+      }
+    );
+
+    // Reset settings to defaults
     new Setting(containerEl)
-      .setName("Boundary threshold (px)")
-      .setDesc("Buffer in pixels to detect when the top or bottom of a note has been reached.")
-      .addSlider((slider) =>
-        slider
-          .setLimits(0, 50, 5)
-          .setValue(this.plugin.settings.thresholdPx)
-          .setDynamicTooltip()
-          .onChange(async (value) => {
-            this.plugin.settings.thresholdPx = value;
+      .setName(strings.resetToDefaults.name)
+      .setDesc(strings.resetToDefaults.desc)
+      .addButton((button) =>
+        button
+          .setButtonText(strings.resetToDefaults.buttonText)
+          .setWarning()
+          .onClick(async () => {
+            this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS);
             await this.plugin.saveSettings();
+            this.display();
+            new Notice(t().notices.settingsReset);
           })
       );
+  }
+
+  /**
+   * Helper: creates a numeric slider setting with optional decimal place formatting.
+   */
+  private addNumericSlider(
+    containerEl: HTMLElement,
+    name: string,
+    desc: string,
+    limits: { min: number; max: number; step: number },
+    value: number,
+    onChange: (value: number) => Promise<void>,
+    decimalPlaces?: number
+  ): Setting {
+    return new Setting(containerEl)
+      .setName(name)
+      .setDesc(desc)
+      .addSlider((slider) => {
+        slider
+          .setLimits(limits.min, limits.max, limits.step)
+          .setValue(value)
+          .setDynamicTooltip();
+
+        if (decimalPlaces !== undefined && typeof slider.setDisplayFormat === "function") {
+          slider.setDisplayFormat((val) => val.toFixed(decimalPlaces));
+        }
+
+        slider.onChange(async (val) => {
+          await onChange(val);
+        });
+      });
   }
 }

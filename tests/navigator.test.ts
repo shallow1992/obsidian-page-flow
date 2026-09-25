@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findNextFile, findPrevFile, sortFiles } from "../src/navigator";
+import { findNextFile, findPrevFile, mapObsidianSortOrder, sortFiles } from "../src/navigator";
 import { TFile } from "obsidian";
 
 function createMockFile(basename: string, ctime: number, mtime: number): TFile {
@@ -42,6 +42,104 @@ describe("Navigator file sorting and resolution", () => {
     it("sorts by mtime descending (recently modified first)", () => {
       const sorted = sortFiles(files, "mtime-desc");
       expect(sorted.map((f) => f.basename)).toEqual(["A_Note", "B_Note", "C_Note"]);
+    });
+
+    describe("file-explorer sort order", () => {
+      it("falls back to name-asc when app is undefined", () => {
+        const sorted = sortFiles(files, "file-explorer");
+        expect(sorted.map((f) => f.basename)).toEqual(["A_Note", "B_Note", "C_Note"]);
+      });
+
+      it("sorts according to visual DOM order when file-explorer view is present", () => {
+        const mockDomElements = [
+          { getAttribute: (attr: string) => (attr === "data-path" ? "C_Note.md" : null) },
+          { getAttribute: (attr: string) => (attr === "data-path" ? "A_Note.md" : null) },
+          { getAttribute: (attr: string) => (attr === "data-path" ? "B_Note.md" : null) },
+        ];
+
+        const mockApp = {
+          workspace: {
+            getLeavesOfType: (type: string) => {
+              if (type === "file-explorer") {
+                return [
+                  {
+                    view: {
+                      containerEl: {
+                        querySelectorAll: (selector: string) =>
+                          selector === "[data-path]" ? mockDomElements : [],
+                      },
+                    },
+                  },
+                ];
+              }
+              return [];
+            },
+          },
+        } as any;
+
+        const sorted = sortFiles(files, "file-explorer", mockApp);
+        expect(sorted.map((f) => f.basename)).toEqual(["C_Note", "A_Note", "B_Note"]);
+      });
+
+      it("places files not in DOM at the end sorted by name-asc", () => {
+        // Only B_Note is in the DOM
+        const mockDomElements = [
+          { getAttribute: (attr: string) => (attr === "data-path" ? "B_Note.md" : null) },
+        ];
+
+        const mockApp = {
+          workspace: {
+            getLeavesOfType: (type: string) => [
+              {
+                view: {
+                  containerEl: {
+                    querySelectorAll: () => mockDomElements,
+                  },
+                },
+              },
+            ],
+          },
+        } as any;
+
+        const sorted = sortFiles(files, "file-explorer", mockApp);
+        // B_Note first, then A_Note and C_Note sorted by name-asc
+        expect(sorted.map((f) => f.basename)).toEqual(["B_Note", "A_Note", "C_Note"]);
+      });
+
+      it("falls back to internal file-explorer sortOrder setting if DOM elements are missing", () => {
+        const mockApp = {
+          workspace: {
+            getLeavesOfType: () => [],
+          },
+          internalPlugins: {
+            getPluginById: (id: string) => {
+              if (id === "file-explorer") {
+                return {
+                  instance: {
+                    sortOrder: "alphabeticalReverse",
+                  },
+                };
+              }
+              return null;
+            },
+          },
+        } as any;
+
+        const sorted = sortFiles(files, "file-explorer", mockApp);
+        expect(sorted.map((f) => f.basename)).toEqual(["C_Note", "B_Note", "A_Note"]);
+      });
+    });
+
+    describe("mapObsidianSortOrder", () => {
+      it("maps Obsidian sort order strings correctly", () => {
+        expect(mapObsidianSortOrder("alphabetical")).toBe("name-asc");
+        expect(mapObsidianSortOrder("alphabeticalReverse")).toBe("name-desc");
+        expect(mapObsidianSortOrder("byModifiedTime")).toBe("mtime-desc");
+        expect(mapObsidianSortOrder("byModifiedTimeReverse")).toBe("mtime-asc");
+        expect(mapObsidianSortOrder("byCreatedTime")).toBe("ctime-desc");
+        expect(mapObsidianSortOrder("byCreatedTimeReverse")).toBe("ctime-asc");
+        expect(mapObsidianSortOrder("unknown")).toBe("name-asc");
+      });
     });
   });
 

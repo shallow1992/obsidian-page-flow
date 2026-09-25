@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateChainedDuration,
   calculateScrollDelta,
+  calculateTargetVelocity,
+  calculateVelocityMultiplier,
+  cancelAllActiveAnimations,
   checkIsAtBottom,
   checkIsAtTop,
+  easeInOutCubic,
   easeOutCubic,
+  scrollDown,
+  scrollUp,
+  stopActiveAnimation,
 } from "../src/scroller";
 
 describe("Scroller calculation logic", () => {
@@ -55,14 +63,165 @@ describe("Scroller calculation logic", () => {
     });
   });
 
-  describe("easeOutCubic", () => {
-    it("returns 0 at progress 0 and 1 at progress 1", () => {
-      expect(easeOutCubic(0)).toBe(0);
-      expect(easeOutCubic(1)).toBe(1);
+  describe("calculateTargetVelocity", () => {
+    it("calculates base velocity correctly for single input (chainCount 0)", () => {
+      // 600px / 600ms = 1.0 px/ms
+      expect(calculateTargetVelocity(600, 600, 0)).toBeCloseTo(1.0);
+      // 560px / 280ms = 2.0 px/ms
+      expect(calculateTargetVelocity(560, 280, 0)).toBeCloseTo(2.0);
     });
 
-    it("has deceleration physics (progress 0.5 yields 0.875)", () => {
-      expect(easeOutCubic(0.5)).toBe(0.875);
+    it("accelerates velocity linearly per consecutive chain hit", () => {
+      const base = calculateTargetVelocity(600, 600, 0); // 1.0
+      // chain 1 -> 1.30x
+      expect(calculateTargetVelocity(600, 600, 1)).toBeCloseTo(base * 1.30);
+      // chain 2 -> 1.60x
+      expect(calculateTargetVelocity(600, 600, 2)).toBeCloseTo(base * 1.60);
+      // chain 3 -> 1.90x
+      expect(calculateTargetVelocity(600, 600, 3)).toBeCloseTo(base * 1.90);
+    });
+
+    it("caps maximum velocity acceleration at chain 4 (2.20x)", () => {
+      const base = calculateTargetVelocity(600, 600, 0);
+      expect(calculateTargetVelocity(600, 600, 4)).toBeCloseTo(base * 2.20);
+      expect(calculateTargetVelocity(600, 600, 10)).toBeCloseTo(base * 2.20);
+    });
+
+    it("respects custom maxMultiplier parameter", () => {
+      const base = calculateTargetVelocity(600, 600, 0);
+      // with maxMultiplier = 3.5
+      expect(calculateTargetVelocity(600, 600, 10, 3.5)).toBeCloseTo(base * 3.5);
+      // with maxMultiplier = 1.5
+      expect(calculateTargetVelocity(600, 600, 10, 1.5)).toBeCloseTo(base * 1.5);
+    });
+  });
+
+  describe("calculateVelocityMultiplier", () => {
+    it("returns 1.0 for chainCount 0", () => {
+      expect(calculateVelocityMultiplier(0)).toBeCloseTo(1.0);
+    });
+
+    it("scales linearly by 0.30 per chain up to chain 4", () => {
+      expect(calculateVelocityMultiplier(1)).toBeCloseTo(1.30);
+      expect(calculateVelocityMultiplier(2)).toBeCloseTo(1.60);
+      expect(calculateVelocityMultiplier(3)).toBeCloseTo(1.90);
+      expect(calculateVelocityMultiplier(4)).toBeCloseTo(2.20);
+    });
+
+    it("caps at 2.20 for chainCount > 4 by default", () => {
+      expect(calculateVelocityMultiplier(5)).toBeCloseTo(2.20);
+      expect(calculateVelocityMultiplier(10)).toBeCloseTo(2.20);
+    });
+
+    it("respects custom maxMultiplier", () => {
+      expect(calculateVelocityMultiplier(10, 3.5)).toBeCloseTo(3.5);
+      expect(calculateVelocityMultiplier(10, 1.3)).toBeCloseTo(1.3);
+      // chain 1 (1.30) with max 1.20 should cap at 1.20
+      expect(calculateVelocityMultiplier(1, 1.2)).toBeCloseTo(1.2);
+    });
+  });
+
+  describe("calculateChainedDuration", () => {
+    it("returns baseDuration for single input (chainCount 0)", () => {
+      expect(calculateChainedDuration(600, 0)).toBe(600);
+      expect(calculateChainedDuration(280, 0)).toBe(280);
+    });
+
+    it("accelerates by exponential decay on rapid key presses", () => {
+      // 600 * 0.65 = 390
+      expect(calculateChainedDuration(600, 1)).toBe(390);
+      // 600 * 0.65^2 = 253.5 -> 254
+      expect(calculateChainedDuration(600, 2)).toBe(254);
+      // 600 * 0.65^3 = 164.775 -> 165
+      expect(calculateChainedDuration(600, 3)).toBe(165);
+    });
+
+    it("clamps to minDuration (150ms cap) on further chaining", () => {
+      // 600 * 0.65^4 = 107.1 -> capped at 150
+      expect(calculateChainedDuration(600, 4)).toBe(150);
+      expect(calculateChainedDuration(600, 10)).toBe(150);
+    });
+
+    it("respects custom baseDuration smaller than default minDuration", () => {
+      expect(calculateChainedDuration(100, 0)).toBe(100);
+      expect(calculateChainedDuration(100, 2)).toBe(100);
+    });
+  });
+
+  describe("Easing functions", () => {
+    describe("easeInOutCubic", () => {
+      it("returns 0 at progress 0 and 1 at progress 1", () => {
+        expect(easeInOutCubic(0)).toBe(0);
+        expect(easeInOutCubic(1)).toBe(1);
+      });
+
+      it("is symmetric at the midpoint (progress 0.5 yields 0.5)", () => {
+        expect(easeInOutCubic(0.5)).toBe(0.5);
+      });
+
+      it("accelerates smoothly in the first half (progress 0.25 yields 0.0625)", () => {
+        expect(easeInOutCubic(0.25)).toBe(0.0625);
+      });
+
+      it("decelerates smoothly in the second half (progress 0.75 yields 0.9375)", () => {
+        expect(easeInOutCubic(0.75)).toBe(0.9375);
+      });
+    });
+
+    describe("easeOutCubic", () => {
+      it("returns 0 at progress 0 and 1 at progress 1", () => {
+        expect(easeOutCubic(0)).toBe(0);
+        expect(easeOutCubic(1)).toBe(1);
+      });
+
+      it("has rapid deceleration physics (progress 0.5 yields 0.875)", () => {
+        expect(easeOutCubic(0.5)).toBe(0.875);
+      });
+    });
+  });
+
+  describe("ScrollPhysicsOptions support", () => {
+    it("accepts options object in scrollDown", () => {
+      const mockContainer = {
+        scrollTop: 0,
+        clientHeight: 800,
+        scrollHeight: 2000,
+      } as HTMLElement;
+
+      const result = scrollDown(mockContainer, {
+        percentage: 85,
+        smooth: false,
+        threshold: 10,
+      });
+
+      expect(result).toBe(true);
+      expect(mockContainer.scrollTop).toBe(680);
+    });
+
+    it("accepts options object in scrollUp", () => {
+      const mockContainer = {
+        scrollTop: 680,
+        clientHeight: 800,
+        scrollHeight: 2000,
+      } as HTMLElement;
+
+      const result = scrollUp(mockContainer, {
+        percentage: 50,
+        smooth: false,
+        threshold: 10,
+      });
+
+      expect(result).toBe(true);
+      expect(mockContainer.scrollTop).toBe(280);
+    });
+
+    it("safely handles stopActiveAnimation when no animation is active", () => {
+      const mockContainer = {} as HTMLElement;
+      expect(() => stopActiveAnimation(mockContainer)).not.toThrow();
+    });
+
+    it("safely handles cancelAllActiveAnimations when called", () => {
+      expect(() => cancelAllActiveAnimations()).not.toThrow();
     });
   });
 });
