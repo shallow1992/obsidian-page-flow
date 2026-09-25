@@ -14,6 +14,24 @@ export const DEFAULT_SETTINGS: PageFlowSettings = {
   thresholdPx: 10,
 };
 
+interface ObsidianSettingTabSearch {
+  inputEl?: HTMLInputElement;
+  setValue?: (val: string) => void;
+}
+
+interface ObsidianHotkeysTab {
+  searchComponent?: ObsidianSettingTabSearch;
+  updateHotkeyVisibility?: () => void;
+}
+
+interface ObsidianSettingManager {
+  openTabById?: (id: string) => ObsidianHotkeysTab | undefined;
+}
+
+interface ObsidianSettingApp {
+  setting?: ObsidianSettingManager;
+}
+
 export class PageFlowSettingTab extends PluginSettingTab {
   plugin: PageFlowPlugin;
 
@@ -27,7 +45,7 @@ export class PageFlowSettingTab extends PluginSettingTab {
     containerEl.empty();
     const strings = t().settings;
 
-    containerEl.createEl("h2", { text: strings.title });
+    new Setting(containerEl).setName(strings.title).setHeading();
 
     // Quick jump to Hotkeys settings (Desktop only, as mobile does not have a hotkeys settings tab)
     if (!Platform.isMobile) {
@@ -40,12 +58,12 @@ export class PageFlowSettingTab extends PluginSettingTab {
             .setCta()
             .onClick(() => {
               try {
-                const setting = (this.app as any).setting;
-                if (setting) {
-                  const hotkeysTab = setting.openTabById("hotkeys");
-                  const applyFilter = () => {
+                const settingApp = this.app as unknown as ObsidianSettingApp;
+                const hotkeysTab = settingApp.setting?.openTabById?.("hotkeys");
+                if (hotkeysTab) {
+                  const applyFilter = (): void => {
                     try {
-                      const searchComp = hotkeysTab?.searchComponent;
+                      const searchComp = hotkeysTab.searchComponent;
                       if (searchComp) {
                         if (searchComp.inputEl) {
                           searchComp.inputEl.value = "Page Flow";
@@ -57,16 +75,16 @@ export class PageFlowSettingTab extends PluginSettingTab {
                           hotkeysTab.updateHotkeyVisibility();
                         }
                       }
-                    } catch (err) {
-                      console.error("Failed to filter hotkey list", err);
+                    } catch {
+                      // Silently ignore if search component unavailable
                     }
                   };
 
                   applyFilter();
                   window.setTimeout(applyFilter, 50);
                 }
-              } catch (e) {
-                console.error("Failed to open hotkey settings", e);
+              } catch {
+                // Silently ignore if internal setting structure changes
               }
             })
         );
@@ -184,7 +202,7 @@ export class PageFlowSettingTab extends PluginSettingTab {
       .addButton((button) =>
         button
           .setButtonText(strings.resetToDefaults.buttonText)
-          .setWarning()
+          .setDestructive()
           .onClick(async () => {
             this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS);
             await this.plugin.saveSettings();
@@ -212,11 +230,15 @@ export class PageFlowSettingTab extends PluginSettingTab {
       .addSlider((slider) => {
         slider
           .setLimits(limits.min, limits.max, limits.step)
-          .setValue(value)
-          .setDynamicTooltip();
+          .setValue(value);
 
-        if (decimalPlaces !== undefined && typeof slider.setDisplayFormat === "function") {
-          slider.setDisplayFormat((val) => val.toFixed(decimalPlaces));
+        if (decimalPlaces !== undefined) {
+          const sliderWithFormat = slider as unknown as {
+            setDisplayFormat?: (format: (val: number) => string) => void;
+          };
+          if (typeof sliderWithFormat.setDisplayFormat === "function") {
+            sliderWithFormat.setDisplayFormat((val) => val.toFixed(decimalPlaces));
+          }
         }
 
         slider.onChange(async (val) => {

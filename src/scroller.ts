@@ -110,7 +110,7 @@ const activeContainers = new Set<HTMLElement>();
 export function stopActiveAnimation(container: HTMLElement): void {
   const existing = activeAnimations.get(container);
   if (existing) {
-    cancelAnimationFrame(existing.frameId);
+    window.cancelAnimationFrame(existing.frameId);
     activeAnimations.delete(container);
   }
   activeContainers.delete(container);
@@ -124,7 +124,7 @@ export function cancelAllActiveAnimations(): void {
   for (const container of activeContainers) {
     const existing = activeAnimations.get(container);
     if (existing) {
-      cancelAnimationFrame(existing.frameId);
+      window.cancelAnimationFrame(existing.frameId);
       activeAnimations.delete(container);
     }
   }
@@ -241,7 +241,7 @@ export function smoothScrollBy(
       if (isActivelyChaining) {
         // User may be rapidly pressing keys; hold at target without killing the animation
         container.scrollTop = currentAnim.targetScrollTop;
-        currentAnim.frameId = requestAnimationFrame(step);
+        currentAnim.frameId = window.requestAnimationFrame(step);
         return;
       }
       debugLog(
@@ -300,10 +300,10 @@ export function smoothScrollBy(
       );
     }
 
-    currentAnim.frameId = requestAnimationFrame(step);
+    currentAnim.frameId = window.requestAnimationFrame(step);
   };
 
-  anim.frameId = requestAnimationFrame(step);
+  anim.frameId = window.requestAnimationFrame(step);
   activeAnimations.set(container, anim);
   activeContainers.add(container);
 }

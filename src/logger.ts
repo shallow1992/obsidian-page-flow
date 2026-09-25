@@ -1,9 +1,9 @@
 /**
  * Diagnostic logger for Page Flow.
- * Can be toggled in code via `setDebugLog(boolean)` or at runtime in DevTools console via `PAGE_FLOW_DEBUG = true/false`.
+ * Disabled by default in production. Can be enabled via DevTools console with `window.PAGE_FLOW_DEBUG = true`.
  */
 
-let isEnabled = true;
+let isEnabled = false;
 
 /**
  * Enable or disable debug logging programmatically in code.
@@ -17,17 +17,20 @@ export function setDebugLog(enabled: boolean): void {
  * Checks runtime global flag `window.PAGE_FLOW_DEBUG` first if defined, then internal flag.
  */
 export function isDebugLogEnabled(): boolean {
-  if (typeof globalThis !== "undefined" && (globalThis as any).PAGE_FLOW_DEBUG !== undefined) {
-    return Boolean((globalThis as any).PAGE_FLOW_DEBUG);
+  if (typeof window !== "undefined") {
+    const win = window as unknown as { PAGE_FLOW_DEBUG?: boolean };
+    if (win.PAGE_FLOW_DEBUG !== undefined) {
+      return Boolean(win.PAGE_FLOW_DEBUG);
+    }
   }
   return isEnabled;
 }
 
 /**
- * Logs a message with `[Page Flow]` prefix if debug logging is enabled.
+ * Logs a debug message with `[Page Flow]` prefix only if debug logging is enabled.
  */
 export function debugLog(...args: unknown[]): void {
   if (isDebugLogEnabled()) {
-    console.log("[Page Flow]", ...args);
+    console.debug("[Page Flow]", ...args);
   }
 }

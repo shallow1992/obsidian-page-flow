@@ -70,19 +70,31 @@ export function sortFilesByExplorer(files: TFile[], app?: App): TFile[] {
         }
       }
     }
-  } catch (err) {
+  } catch {
     // Fall back to setting or name-asc
   }
 
   // 2. Fallback: check Obsidian's internal file explorer sortOrder setting
   try {
-    const explorerPlugin = (app as any)?.internalPlugins?.getPluginById?.("file-explorer");
-    const sortSetting = explorerPlugin?.instance?.sortOrder;
-    if (sortSetting) {
+    interface FileExplorerPluginInstance {
+      sortOrder?: string;
+    }
+    interface FileExplorerPlugin {
+      instance?: FileExplorerPluginInstance;
+    }
+    interface InternalPluginsApp {
+      internalPlugins?: {
+        getPluginById?: (id: string) => FileExplorerPlugin | undefined;
+      };
+    }
+
+    const customApp = app as unknown as InternalPluginsApp;
+    const sortSetting = customApp.internalPlugins?.getPluginById?.("file-explorer")?.instance?.sortOrder;
+    if (typeof sortSetting === "string") {
       const mappedOrder = mapObsidianSortOrder(sortSetting);
       return sortFiles(files, mappedOrder);
     }
-  } catch (err) {
+  } catch {
     // Fallback to name-asc
   }
 
