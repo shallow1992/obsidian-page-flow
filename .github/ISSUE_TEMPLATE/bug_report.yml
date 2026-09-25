@@ -1,0 +1,92 @@
+name: 🐛 Bug Report
+description: Report a reproducible bug or unexpected behavior
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting an issue! Please check existing issues before submitting to avoid duplicates.
+
+  - type: input
+    id: version
+    attributes:
+      label: Plugin Version
+      description: What version of Page Flow are you running? (e.g., 1.0.0)
+      placeholder: e.g. 1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: obsidian_version
+    attributes:
+      label: Obsidian Version
+      description: What version of Obsidian are you using?
+      placeholder: e.g. 1.6.7
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Operating System / Platform
+      description: Which platform did you encounter the issue on?
+      options:
+        - macOS
+        - Windows
+        - Linux
+        - iOS
+        - Android
+    validations:
+      required: true
+
+  - type: dropdown
+    id: feature_area
+    attributes:
+      label: Affected Feature Area
+      description: Which feature of Page Flow was involved?
+      options:
+        - Page-by-page Scrolling (Up / Down)
+        - Note Transitions (Previous / Next Note)
+        - Dynamic Velocity Acceleration / Momentum
+        - File Explorer Visual Sort Order
+        - Settings Tab / Configuration
+        - General / Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the Bug
+      description: A clear and concise description of what the bug is.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the behavior.
+      placeholder: |
+        1. Open a markdown file with multiple pages of text.
+        2. Press the scroll down command hotkey.
+        3. ...
+        4. Notice the error / unexpected behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: A clear and concise description of what you expected to happen.
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Screenshots or Console Logs
+      description: Please paste any relevant error logs (Developer Tools console: Ctrl/Cmd + Shift + I) or upload screenshots.
+    validations:
+      required: false
