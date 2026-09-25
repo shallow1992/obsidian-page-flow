@@ -145,6 +145,7 @@ export default class PageFlowPlugin extends Plugin {
     );
 
     if (!scrolled) {
+      console.log("[Page Flow] handleForward: scrollDown returned false -> triggering openNextFile");
       const currentFile = view.file;
       if (currentFile) {
         this.openNextFile(currentFile);
@@ -165,6 +166,7 @@ export default class PageFlowPlugin extends Plugin {
     );
 
     if (!scrolled) {
+      console.log("[Page Flow] handleBackward: scrollUp returned false -> triggering openPrevFile");
       const currentFile = view.file;
       if (currentFile) {
         this.openPrevFile(currentFile, true);

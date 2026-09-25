@@ -124,6 +124,9 @@ export function smoothScrollBy(
 
   // If already at target, finish immediately
   if (Math.abs(clampedTarget - currentScroll) < 1) {
+    console.log(
+      `[Page Flow] smoothScrollBy: Already at target. clampedTarget=${clampedTarget}, currentScroll=${currentScroll}`
+    );
     container.scrollTop = clampedTarget;
     if (existing) {
       cancelAnimationFrame(existing.frameId);
@@ -138,6 +141,12 @@ export function smoothScrollBy(
     existing.chainCount += 1;
     existing.delta = delta;
     existing.duration = duration;
+    console.log(
+      `[Page Flow] Key pressed (chain extended): chainCount=${existing.chainCount}, ` +
+      `currentScroll=${currentScroll.toFixed(1)}, targetScrollTop=${existing.targetScrollTop.toFixed(1)}, ` +
+      `distance=${Math.abs(existing.targetScrollTop - currentScroll).toFixed(1)}, ` +
+      `currentVelocity=${existing.currentVelocity.toFixed(3)} px/ms`
+    );
     return;
   }
 
@@ -153,6 +162,13 @@ export function smoothScrollBy(
     duration,
   };
 
+  console.log(
+    `[Page Flow] Key pressed (new animation): chainCount=0, ` +
+    `currentScroll=${currentScroll.toFixed(1)}, targetScrollTop=${clampedTarget.toFixed(1)}, ` +
+    `distance=${Math.abs(clampedTarget - currentScroll).toFixed(1)}`
+  );
+
+  let frameCount = 0;
   const step = (now: number) => {
     const currentAnim = activeAnimations.get(container);
     if (!currentAnim) return;
@@ -166,6 +182,11 @@ export function smoothScrollBy(
 
     // Reached target within 1px
     if (distance <= 1) {
+      console.log(
+        `[Page Flow] Stopped! Reason: Reached target (dist <= 1). ` +
+        `finalScrollTop=${currScroll.toFixed(1)}, target=${currentAnim.targetScrollTop.toFixed(1)}, ` +
+        `chainCount=${currentAnim.chainCount}`
+      );
       container.scrollTop = currentAnim.targetScrollTop;
       activeAnimations.delete(container);
       return;
@@ -204,6 +225,17 @@ export function smoothScrollBy(
 
     const stepMove = Math.min(distance, currentAnim.currentVelocity * dt);
     container.scrollTop = currScroll + stepMove * direction;
+
+    frameCount++;
+    // Log periodic progress or when entering braking zone
+    if (frameCount % 6 === 0 || distance < brakeDistance) {
+      console.log(
+        `[Page Flow] Frame #${frameCount}: v=${currentAnim.currentVelocity.toFixed(3)} px/ms ` +
+        `(targetSpeed=${targetSpeed.toFixed(3)}, maxV=${maxVelocity.toFixed(3)}), ` +
+        `scroll=${container.scrollTop.toFixed(1)}, target=${currentAnim.targetScrollTop.toFixed(1)}, ` +
+        `dist=${distance.toFixed(1)}, inBrakeZone=${distance < brakeDistance}`
+      );
+    }
 
     currentAnim.frameId = requestAnimationFrame(step);
   };
@@ -256,6 +288,10 @@ export function scrollDown(
   const scrollHeight = container.scrollHeight;
 
   if (checkIsAtBottom(currentOrTargetScrollTop, clientHeight, scrollHeight, threshold)) {
+    console.log(
+      `[Page Flow] scrollDown blocked: checkIsAtBottom=true. ` +
+      `currentOrTargetScrollTop=${currentOrTargetScrollTop.toFixed(1)}, clientHeight=${clientHeight}, scrollHeight=${scrollHeight}, threshold=${threshold}`
+    );
     return false;
   }
 
@@ -288,6 +324,10 @@ export function scrollUp(
   const clientHeight = container.clientHeight;
 
   if (checkIsAtTop(currentOrTargetScrollTop, threshold)) {
+    console.log(
+      `[Page Flow] scrollUp blocked: checkIsAtTop=true. ` +
+      `currentOrTargetScrollTop=${currentOrTargetScrollTop.toFixed(1)}, threshold=${threshold}`
+    );
     return false;
   }
 
