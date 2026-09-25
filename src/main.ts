@@ -93,7 +93,7 @@ export default class PageFlowPlugin extends Plugin {
         const activeFile = this.app.workspace.getActiveFile();
         if (!activeFile) return false;
         if (!checking) {
-          this.openNextFile(activeFile);
+          void this.openNextFile(activeFile);
         }
         return true;
       },
@@ -107,7 +107,7 @@ export default class PageFlowPlugin extends Plugin {
         const activeFile = this.app.workspace.getActiveFile();
         if (!activeFile) return false;
         if (!checking) {
-          this.openPrevFile(activeFile);
+          void this.openPrevFile(activeFile);
         }
         return true;
       },
@@ -119,7 +119,8 @@ export default class PageFlowPlugin extends Plugin {
   }
 
   async loadSettings(): Promise<void> {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loaded = (await this.loadData()) as Partial<PageFlowSettings> | null;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
   }
 
   async saveSettings(): Promise<void> {
@@ -136,7 +137,7 @@ export default class PageFlowPlugin extends Plugin {
       debugLog("handleForward: scrollDown returned false -> triggering openNextFile");
       const currentFile = view.file;
       if (currentFile) {
-        this.openNextFile(currentFile);
+        void this.openNextFile(currentFile);
       }
     }
   }
@@ -151,7 +152,7 @@ export default class PageFlowPlugin extends Plugin {
       debugLog("handleBackward: scrollUp returned false -> triggering openPrevFile");
       const currentFile = view.file;
       if (currentFile) {
-        this.openPrevFile(currentFile, true);
+        void this.openPrevFile(currentFile, true);
       }
     }
   }
