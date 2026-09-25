@@ -4,6 +4,7 @@ import {
   calculateScrollDelta,
   calculateTargetVelocity,
   calculateVelocityMultiplier,
+  cancelAllActiveAnimations,
   checkIsAtBottom,
   checkIsAtTop,
   easeInOutCubic,
@@ -217,6 +218,10 @@ describe("Scroller calculation logic", () => {
     it("safely handles stopActiveAnimation when no animation is active", () => {
       const mockContainer = {} as HTMLElement;
       expect(() => stopActiveAnimation(mockContainer)).not.toThrow();
+    });
+
+    it("safely handles cancelAllActiveAnimations when called", () => {
+      expect(() => cancelAllActiveAnimations()).not.toThrow();
     });
   });
 });

@@ -2,6 +2,7 @@ import { MarkdownView, Notice, Plugin, TFile } from "obsidian";
 import { DEFAULT_SETTINGS, PageFlowSettingTab } from "./settings";
 import { PageFlowSettings } from "./types";
 import {
+  cancelAllActiveAnimations,
   getScrollContainer,
   scrollDown,
   scrollToBottom,
@@ -111,6 +112,10 @@ export default class PageFlowPlugin extends Plugin {
         return true;
       },
     });
+  }
+
+  onunload(): void {
+    cancelAllActiveAnimations();
   }
 
   async loadSettings(): Promise<void> {

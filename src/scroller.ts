@@ -102,6 +102,7 @@ interface ActiveScrollAnimation {
 }
 
 const activeAnimations = new WeakMap<HTMLElement, ActiveScrollAnimation>();
+const activeContainers = new Set<HTMLElement>();
 
 /**
  * Safely stops and removes any active scroll animation running on the container.
@@ -112,6 +113,22 @@ export function stopActiveAnimation(container: HTMLElement): void {
     cancelAnimationFrame(existing.frameId);
     activeAnimations.delete(container);
   }
+  activeContainers.delete(container);
+}
+
+/**
+ * Cancels all currently active scroll animations across all containers.
+ * Called during plugin onunload to prevent any background requestAnimationFrame leaks.
+ */
+export function cancelAllActiveAnimations(): void {
+  for (const container of activeContainers) {
+    const existing = activeAnimations.get(container);
+    if (existing) {
+      cancelAnimationFrame(existing.frameId);
+      activeAnimations.delete(container);
+    }
+  }
+  activeContainers.clear();
 }
 
 /**
@@ -288,6 +305,7 @@ export function smoothScrollBy(
 
   anim.frameId = requestAnimationFrame(step);
   activeAnimations.set(container, anim);
+  activeContainers.add(container);
 }
 
 /**
