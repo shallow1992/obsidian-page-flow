@@ -10,6 +10,7 @@ import {
 } from "./scroller";
 import { resolveNextFile, resolvePrevFile } from "./navigator";
 import { t } from "./i18n";
+import { debugLog } from "./logger";
 
 export default class PageFlowPlugin extends Plugin {
   settings: PageFlowSettings = DEFAULT_SETTINGS;
@@ -145,7 +146,7 @@ export default class PageFlowPlugin extends Plugin {
     );
 
     if (!scrolled) {
-      console.log("[Page Flow] handleForward: scrollDown returned false -> triggering openNextFile");
+      debugLog("handleForward: scrollDown returned false -> triggering openNextFile");
       const currentFile = view.file;
       if (currentFile) {
         this.openNextFile(currentFile);
@@ -166,7 +167,7 @@ export default class PageFlowPlugin extends Plugin {
     );
 
     if (!scrolled) {
-      console.log("[Page Flow] handleBackward: scrollUp returned false -> triggering openPrevFile");
+      debugLog("handleBackward: scrollUp returned false -> triggering openPrevFile");
       const currentFile = view.file;
       if (currentFile) {
         this.openPrevFile(currentFile, true);

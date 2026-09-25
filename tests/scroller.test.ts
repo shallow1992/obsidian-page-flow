@@ -69,18 +69,18 @@ describe("Scroller calculation logic", () => {
 
     it("accelerates velocity linearly per consecutive chain hit", () => {
       const base = calculateTargetVelocity(600, 600, 0); // 1.0
-      // chain 1 -> 1.55x
-      expect(calculateTargetVelocity(600, 600, 1)).toBeCloseTo(base * 1.55);
-      // chain 2 -> 2.10x
-      expect(calculateTargetVelocity(600, 600, 2)).toBeCloseTo(base * 2.10);
-      // chain 3 -> 2.65x
-      expect(calculateTargetVelocity(600, 600, 3)).toBeCloseTo(base * 2.65);
+      // chain 1 -> 1.30x
+      expect(calculateTargetVelocity(600, 600, 1)).toBeCloseTo(base * 1.30);
+      // chain 2 -> 1.60x
+      expect(calculateTargetVelocity(600, 600, 2)).toBeCloseTo(base * 1.60);
+      // chain 3 -> 1.90x
+      expect(calculateTargetVelocity(600, 600, 3)).toBeCloseTo(base * 1.90);
     });
 
-    it("caps maximum velocity acceleration at chain 4 (3.2x)", () => {
+    it("caps maximum velocity acceleration at chain 4 (2.20x)", () => {
       const base = calculateTargetVelocity(600, 600, 0);
-      expect(calculateTargetVelocity(600, 600, 4)).toBeCloseTo(base * 3.20);
-      expect(calculateTargetVelocity(600, 600, 10)).toBeCloseTo(base * 3.20);
+      expect(calculateTargetVelocity(600, 600, 4)).toBeCloseTo(base * 2.20);
+      expect(calculateTargetVelocity(600, 600, 10)).toBeCloseTo(base * 2.20);
     });
   });
 
@@ -89,16 +89,16 @@ describe("Scroller calculation logic", () => {
       expect(calculateVelocityMultiplier(0)).toBeCloseTo(1.0);
     });
 
-    it("scales linearly by 0.55 per chain up to chain 4", () => {
-      expect(calculateVelocityMultiplier(1)).toBeCloseTo(1.55);
-      expect(calculateVelocityMultiplier(2)).toBeCloseTo(2.10);
-      expect(calculateVelocityMultiplier(3)).toBeCloseTo(2.65);
-      expect(calculateVelocityMultiplier(4)).toBeCloseTo(3.20);
+    it("scales linearly by 0.30 per chain up to chain 4", () => {
+      expect(calculateVelocityMultiplier(1)).toBeCloseTo(1.30);
+      expect(calculateVelocityMultiplier(2)).toBeCloseTo(1.60);
+      expect(calculateVelocityMultiplier(3)).toBeCloseTo(1.90);
+      expect(calculateVelocityMultiplier(4)).toBeCloseTo(2.20);
     });
 
-    it("caps at 3.20 for chainCount > 4", () => {
-      expect(calculateVelocityMultiplier(5)).toBeCloseTo(3.20);
-      expect(calculateVelocityMultiplier(10)).toBeCloseTo(3.20);
+    it("caps at 2.20 for chainCount > 4", () => {
+      expect(calculateVelocityMultiplier(5)).toBeCloseTo(2.20);
+      expect(calculateVelocityMultiplier(10)).toBeCloseTo(2.20);
     });
   });
 

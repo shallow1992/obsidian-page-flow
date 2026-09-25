@@ -1,4 +1,5 @@
 import { MarkdownView } from "obsidian";
+import { debugLog } from "./logger";
 
 /**
  * Pure calculation helper: checks whether the container scroll is at the bottom.
@@ -32,17 +33,17 @@ export function calculateScrollDelta(clientHeight: number, percentage: number): 
 
 /**
  * Pure calculation helper: calculates velocity multiplier based on chainCount.
- * Multipliers: 1.0x (1st) -> 1.55x (2nd) -> 2.1x (3rd) -> 2.65x (4th) -> 3.2x (5th+).
+ * Multipliers: 1.0x (1st) -> 1.30x (2nd) -> 1.60x (3rd) -> 1.90x (4th) -> 2.20x (5th+).
  */
 export function calculateVelocityMultiplier(chainCount: number): number {
-  return 1 + Math.min(chainCount, 4) * 0.55;
+  return 1 + Math.min(chainCount, 4) * 0.30;
 }
 
 /**
  * Pure calculation helper: calculates maximum velocity for smooth scrolling.
  * Scales velocity under rapid consecutive key presses (chainCount).
  * Base velocity: Math.abs(delta) / baseDuration (px/ms).
- * Multipliers: 1.0x (1st) -> 1.55x (2nd) -> 2.1x (3rd) -> 2.65x (4th) -> 3.2x (5th+).
+ * Multipliers: 1.0x (1st) -> 1.30x (2nd) -> 1.60x (3rd) -> 1.90x (4th) -> 2.20x (5th+).
  */
 export function calculateTargetVelocity(
   delta: number,
@@ -111,7 +112,7 @@ export function smoothScrollBy(
 ): void {
   const clientHeight = container.clientHeight;
   const maxScroll = Math.max(0, container.scrollHeight - clientHeight);
-  const maxQueuedDistance = clientHeight * 12.0;
+  const maxQueuedDistance = clientHeight * 5.0;
 
   const existing = activeAnimations.get(container);
   const currentScroll = container.scrollTop;
@@ -142,8 +143,8 @@ export function smoothScrollBy(
 
   // If already at target, finish immediately
   if (Math.abs(clampedTarget - currentScroll) < 1) {
-    console.log(
-      `[Page Flow] smoothScrollBy: Already at target. clampedTarget=${clampedTarget}, currentScroll=${currentScroll}`
+    debugLog(
+      `smoothScrollBy: Already at target. clampedTarget=${clampedTarget}, currentScroll=${currentScroll}`
     );
     container.scrollTop = clampedTarget;
     if (existing) {
@@ -160,8 +161,8 @@ export function smoothScrollBy(
     existing.lastInputTime = now;
     existing.delta = delta;
     existing.duration = duration;
-    console.log(
-      `[Page Flow] Key pressed (chain extended): chainCount=${existing.chainCount}, ` +
+    debugLog(
+      `Key pressed (chain extended): chainCount=${existing.chainCount}, ` +
       `effectiveDelta=${effectiveDelta}, currentScroll=${currentScroll.toFixed(1)}, ` +
       `targetScrollTop=${existing.targetScrollTop.toFixed(1)}, ` +
       `distance=${Math.abs(existing.targetScrollTop - currentScroll).toFixed(1)}, ` +
@@ -182,8 +183,8 @@ export function smoothScrollBy(
     duration,
   };
 
-  console.log(
-    `[Page Flow] Key pressed (new animation): chainCount=0, ` +
+  debugLog(
+    `Key pressed (new animation): chainCount=0, ` +
     `currentScroll=${currentScroll.toFixed(1)}, targetScrollTop=${clampedTarget.toFixed(1)}, ` +
     `distance=${Math.abs(clampedTarget - currentScroll).toFixed(1)}`
   );
@@ -211,8 +212,8 @@ export function smoothScrollBy(
         currentAnim.frameId = requestAnimationFrame(step);
         return;
       }
-      console.log(
-        `[Page Flow] Stopped! Reason: Reached target (dist <= 1). ` +
+      debugLog(
+        `Stopped! Reason: Reached target (dist <= 1). ` +
         `finalScrollTop=${currScroll.toFixed(1)}, target=${currentAnim.targetScrollTop.toFixed(1)}, ` +
         `chainCount=${currentAnim.chainCount}, idleTime=${timeSinceLastInput.toFixed(0)}ms`
       );
@@ -258,8 +259,8 @@ export function smoothScrollBy(
     frameCount++;
     // Log periodic progress or when entering braking zone
     if (frameCount % 6 === 0 || (!isActivelyChaining && distance < brakeDistance)) {
-      console.log(
-        `[Page Flow] Frame #${frameCount}: v=${currentAnim.currentVelocity.toFixed(3)} px/ms ` +
+      debugLog(
+        `Frame #${frameCount}: v=${currentAnim.currentVelocity.toFixed(3)} px/ms ` +
         `(targetSpeed=${targetSpeed.toFixed(3)}, maxV=${maxVelocity.toFixed(3)}), ` +
         `scroll=${container.scrollTop.toFixed(1)}, target=${currentAnim.targetScrollTop.toFixed(1)}, ` +
         `dist=${distance.toFixed(1)}, isChaining=${isActivelyChaining}`
@@ -319,14 +320,14 @@ export function scrollDown(
   if (checkIsAtBottom(currentOrTargetScrollTop, clientHeight, scrollHeight, threshold)) {
     // If target reached bottom but visible scroll is still catching up, let it finish scrolling!
     if (existing && !checkIsAtBottom(container.scrollTop, clientHeight, scrollHeight, threshold)) {
-      console.log(
-        `[Page Flow] scrollDown: target at bottom, but container still visibly scrolling. ` +
+      debugLog(
+        `scrollDown: target at bottom, but container still visibly scrolling. ` +
         `scrollTop=${container.scrollTop.toFixed(1)}, target=${existing.targetScrollTop.toFixed(1)}`
       );
       return true;
     }
-    console.log(
-      `[Page Flow] scrollDown blocked: checkIsAtBottom=true. ` +
+    debugLog(
+      `scrollDown blocked: checkIsAtBottom=true. ` +
       `currentOrTargetScrollTop=${currentOrTargetScrollTop.toFixed(1)}, clientHeight=${clientHeight}, scrollHeight=${scrollHeight}, threshold=${threshold}`
     );
     return false;
@@ -363,14 +364,14 @@ export function scrollUp(
   if (checkIsAtTop(currentOrTargetScrollTop, threshold)) {
     // If target reached top but visible scroll is still catching up, let it finish scrolling!
     if (existing && !checkIsAtTop(container.scrollTop, threshold)) {
-      console.log(
-        `[Page Flow] scrollUp: target at top, but container still visibly scrolling. ` +
+      debugLog(
+        `scrollUp: target at top, but container still visibly scrolling. ` +
         `scrollTop=${container.scrollTop.toFixed(1)}, target=${existing.targetScrollTop.toFixed(1)}`
       );
       return true;
     }
-    console.log(
-      `[Page Flow] scrollUp blocked: checkIsAtTop=true. ` +
+    debugLog(
+      `scrollUp blocked: checkIsAtTop=true. ` +
       `currentOrTargetScrollTop=${currentOrTargetScrollTop.toFixed(1)}, threshold=${threshold}`
     );
     return false;
