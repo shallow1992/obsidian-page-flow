@@ -94,7 +94,7 @@ export class PageFlowSettingTab extends PluginSettingTab {
       containerEl,
       strings.scrollAmount.name,
       strings.scrollAmount.desc,
-      { min: 50, max: 100, step: 5 },
+      { min: 10, max: 100, step: 5 },
       this.plugin.settings.scrollPercentage,
       async (val) => {
         this.plugin.settings.scrollPercentage = val;

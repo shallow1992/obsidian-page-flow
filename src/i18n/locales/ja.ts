@@ -18,7 +18,7 @@ export const ja: TranslationStrings = {
     },
     scrollAmount: {
       name: "スクロール量 (%)",
-      desc: "1回のステップでスクロールする画面の高さの割合（推奨: 80-90%）。",
+      desc: "1回のステップでスクロールする画面の高さの割合（ページ送り重視なら 80-90%、微調整重視なら 15-30% 推奨）。",
     },
     smoothScroll: {
       name: "スムーズスクロール",
