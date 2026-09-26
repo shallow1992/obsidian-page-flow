@@ -1,32 +1,40 @@
-import { App, TFile, WorkspaceLeaf } from "obsidian";
+import { App, TFile, TFolder, WorkspaceLeaf } from "obsidian";
 import { debugLog } from "./logger";
 
 /**
  * Helper: finds the currently focused, selected, or active file/folder element in the explorer container.
- * Inspects browser focus, Obsidian's selection classes (.is-focused, .is-selected), and fallbacks.
+ * Prioritizes Obsidian's visual selection classes (.is-selected, .is-focused) over browser activeElement,
+ * because arrow-key navigation in Obsidian updates CSS classes rather than browser focus.
  */
 export function getFocusedOrSelectedExplorerItem(containerEl: HTMLElement): HTMLElement | null {
-  // 1. Browser activeElement inside container
+  // 1. FIRST: Check Obsidian's keyboard selection classes (.is-selected, .is-focused)
+  const selectedByClass = containerEl.querySelector<HTMLElement>(
+    ".nav-folder-title.is-selected, .nav-file-title.is-selected, " +
+      ".nav-folder-title.is-focused, .nav-file-title.is-focused, " +
+      ".tree-item-self.is-selected, .tree-item-self.is-focused"
+  );
+  if (selectedByClass) {
+    return selectedByClass;
+  }
+
+  // 2. SECOND: Browser activeElement inside container
   const activeEl = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
   if (activeEl && containerEl.contains(activeEl)) {
     const item = activeEl.closest<HTMLElement>(
-      ".nav-file-title, .nav-folder-title, .tree-item-self"
+      ".nav-folder-title, .nav-file-title, .tree-item-self"
     );
-    if (item) return item;
+    if (item && item !== containerEl) {
+      return item;
+    }
   }
 
-  // 2. Obsidian's keyboard focus classes applied during arrow key navigation
-  const focusedByClass = containerEl.querySelector<HTMLElement>(
-    ".nav-file-title.is-focused, .nav-folder-title.is-focused, .tree-item-self.is-focused, " +
-      ".nav-file-title.is-selected, .nav-folder-title.is-selected, .tree-item-self.is-selected"
-  );
-  if (focusedByClass) return focusedByClass;
-
-  // 3. Browser :focus pseudo-class
+  // 3. THIRD: Browser :focus pseudo-class
   const focusedPseudo = containerEl.querySelector<HTMLElement>(
-    ".nav-file-title:focus, .nav-folder-title:focus, .tree-item-self:focus"
+    ".nav-folder-title:focus, .nav-file-title:focus, .tree-item-self:focus"
   );
-  if (focusedPseudo) return focusedPseudo;
+  if (focusedPseudo) {
+    return focusedPseudo;
+  }
 
   // 4. Fallback: currently active file title
   return containerEl.querySelector<HTMLElement>(
@@ -37,9 +45,18 @@ export function getFocusedOrSelectedExplorerItem(containerEl: HTMLElement): HTML
 /**
  * Helper: checks whether an item element represents a folder/directory.
  */
-export function isFolderElement(item: HTMLElement): boolean {
+export function isFolderElement(item: HTMLElement, app?: App): boolean {
   if (item.classList.contains("nav-folder-title")) return true;
   if (item.classList.contains("nav-folder")) return true;
+
+  const path =
+    item.getAttribute("data-path") ||
+    item.closest("[data-path]")?.getAttribute("data-path");
+  if (path && app) {
+    const abstractFile = app.vault.getAbstractFileByPath(path);
+    if (abstractFile instanceof TFolder) return true;
+  }
+
   const parentFolder = item.closest(".nav-folder");
   const parentFile = item.closest(".nav-file");
   return Boolean(parentFolder && !parentFile);
@@ -151,23 +168,34 @@ export class KeyboardFiler {
       e.stopImmediatePropagation();
 
       const item = getFocusedOrSelectedExplorerItem(containerEl);
+      const itemPath =
+        item?.getAttribute("data-path") ||
+        item?.closest("[data-path]")?.getAttribute("data-path") ||
+        "";
+
+      debugLog(
+        `KeyboardFiler: Enter key intercepted! itemFound=${Boolean(item)}, ` +
+          `tagName=${item?.tagName}, classList=${Array.from(item?.classList || []).join(" ")}, ` +
+          `path=${itemPath}`
+      );
+
       if (!item) {
-        this.stop(true);
+        debugLog("KeyboardFiler: No item found in explorer, ignoring Enter.");
         return true;
       }
 
       // Check if item is a folder
-      if (isFolderElement(item)) {
+      if (isFolderElement(item, this.app)) {
+        debugLog(`KeyboardFiler: Folder detected (${itemPath}). Toggling collapse without renaming.`);
         this.toggleFolder(item);
+        // Do NOT stop filer mode! Keep filer active so user can continue navigating.
         return true;
       }
 
       // Otherwise, it's a file: open it and restore focus to editor
-      const path =
-        item.getAttribute("data-path") ||
-        item.closest("[data-path]")?.getAttribute("data-path");
-      if (path) {
-        const file = this.app.vault.getAbstractFileByPath(path);
+      debugLog(`KeyboardFiler: File detected (${itemPath}). Opening file.`);
+      if (itemPath) {
+        const file = this.app.vault.getAbstractFileByPath(itemPath);
         if (file instanceof TFile) {
           void this.app.workspace.getLeaf(false).openFile(file).then(() => {
             this.stop(true);
@@ -184,6 +212,7 @@ export class KeyboardFiler {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
+      debugLog("KeyboardFiler: Escape intercepted, stopping filer mode.");
       this.stop(true);
       return true;
     }
@@ -201,7 +230,7 @@ export class KeyboardFiler {
       folderEl.getAttribute("data-path") ||
       folderEl.querySelector("[data-path]")?.getAttribute("data-path");
 
-    // 1. Try Obsidian internal fileItem API (safest, no click event)
+    // 1. Try Obsidian internal fileItem API (safest: no DOM click events, zero rename risk)
     const explorerLeaf = this.getExplorerLeaf();
     interface ExplorerFileItem {
       setCollapsed?: (val: boolean) => void;
@@ -209,20 +238,24 @@ export class KeyboardFiler {
     }
     const fileItems = (explorerLeaf?.view as unknown as { fileItems?: Record<string, ExplorerFileItem> })?.fileItems;
     if (path && fileItems && fileItems[path] && typeof fileItems[path].setCollapsed === "function") {
-      fileItems[path].setCollapsed(!fileItems[path].collapsed);
+      const currentCollapsed = Boolean(fileItems[path].collapsed);
+      debugLog(`KeyboardFiler: Using fileItems API for '${path}', setCollapsed(${!currentCollapsed})`);
+      fileItems[path].setCollapsed?.(!currentCollapsed);
       return;
     }
 
-    // 2. DOM fallback: click only the collapse arrow icon, never the title itself
+    // 2. DOM fallback: click only the collapse arrow indicator icon, NEVER the title itself!
     const indicator = folderEl.querySelector<HTMLElement>(
       ".nav-folder-collapse-indicator, .collapse-icon, .tree-item-icon"
     );
     if (indicator && typeof indicator.click === "function") {
+      debugLog(`KeyboardFiler: Clicking collapse indicator for '${path}'`);
       indicator.click();
       return;
     }
 
-    // 3. Fallback: toggle is-collapsed class directly
+    // 3. Fallback: toggle is-collapsed class
+    debugLog(`KeyboardFiler: Toggling is-collapsed class for '${path}'`);
     folderEl.classList.toggle("is-collapsed");
   }
 
