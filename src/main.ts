@@ -22,6 +22,14 @@ export default class PageFlowPlugin extends Plugin {
 
     this.filer = new KeyboardFiler(this.app);
 
+    this.registerEvent(
+      this.app.workspace.on("active-leaf-change", (leaf) => {
+        if (this.filer.isFilerActive() && leaf?.view?.getViewType() !== "file-explorer") {
+          this.filer.stop(false);
+        }
+      })
+    );
+
     this.addSettingTab(new PageFlowSettingTab(this.app, this));
 
     const strings = t();
@@ -31,7 +39,7 @@ export default class PageFlowPlugin extends Plugin {
       id: "scroll-or-next",
       name: strings.commands.scrollOrNext,
       checkCallback: (checking: boolean) => {
-        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        const view = this.getActiveOrFilerMarkdownView();
         if (!view) return false;
         if (!checking) {
           this.handleForward(view);
@@ -45,7 +53,7 @@ export default class PageFlowPlugin extends Plugin {
       id: "scroll-or-prev",
       name: strings.commands.scrollOrPrev,
       checkCallback: (checking: boolean) => {
-        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        const view = this.getActiveOrFilerMarkdownView();
         if (!view) return false;
         if (!checking) {
           this.handleBackward(view);
@@ -59,7 +67,7 @@ export default class PageFlowPlugin extends Plugin {
       id: "scroll-page-down",
       name: strings.commands.scrollPageDown,
       checkCallback: (checking: boolean) => {
-        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        const view = this.getActiveOrFilerMarkdownView();
         if (!view) return false;
         if (!checking) {
           const container = getScrollContainer(view);
@@ -76,7 +84,7 @@ export default class PageFlowPlugin extends Plugin {
       id: "scroll-page-up",
       name: strings.commands.scrollPageUp,
       checkCallback: (checking: boolean) => {
-        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        const view = this.getActiveOrFilerMarkdownView();
         if (!view) return false;
         if (!checking) {
           const container = getScrollContainer(view);
@@ -121,7 +129,24 @@ export default class PageFlowPlugin extends Plugin {
       id: "focus-file-explorer",
       name: strings.commands.focusFileExplorer,
       callback: () => {
-        this.filer.start();
+        if (this.filer.isFilerActive()) {
+          this.filer.stop(true);
+        } else {
+          this.filer.start();
+        }
+      },
+    });
+
+    // 8. Filer: Exit filer mode (Focus editor)
+    this.addCommand({
+      id: "exit-file-explorer",
+      name: strings.commands.exitFileExplorer,
+      checkCallback: (checking: boolean) => {
+        if (!this.filer.isFilerActive()) return false;
+        if (!checking) {
+          this.filer.stop(true);
+        }
+        return true;
       },
     });
   }
@@ -206,5 +231,22 @@ export default class PageFlowPlugin extends Plugin {
         }
       }
     });
+  }
+
+  private getActiveOrFilerMarkdownView(): MarkdownView | null {
+    const directView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (directView) return directView;
+
+    if (this.filer.isFilerActive()) {
+      const previewedLeaf = this.filer.getLastPreviewedLeaf();
+      if (previewedLeaf?.view instanceof MarkdownView) {
+        return previewedLeaf.view;
+      }
+      const mdLeaves = this.app.workspace.getLeavesOfType("markdown");
+      if (mdLeaves.length > 0 && mdLeaves[0].view instanceof MarkdownView) {
+        return mdLeaves[0].view;
+      }
+    }
+    return null;
   }
 }

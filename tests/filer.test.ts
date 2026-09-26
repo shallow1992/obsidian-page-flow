@@ -10,11 +10,11 @@ class MockClassList {
   contains(cls: string): boolean {
     return this.set.has(cls);
   }
-  add(cls: string): void {
-    this.set.add(cls);
+  add(...tokens: string[]): void {
+    tokens.forEach((t) => this.set.add(t));
   }
-  remove(cls: string): void {
-    this.set.delete(cls);
+  remove(...tokens: string[]): void {
+    tokens.forEach((t) => this.set.delete(t));
   }
   has(cls: string): boolean {
     return this.set.has(cls);
@@ -46,6 +46,14 @@ class MockDomNode {
 
   getAttribute(name: string): string | null {
     return this.attributes.get(name) ?? null;
+  }
+
+  hasAttribute(name: string): boolean {
+    return this.attributes.has(name);
+  }
+
+  setAttribute(name: string, value: string): void {
+    this.attributes.set(name, value);
   }
 
   appendChild<T extends MockDomNode>(child: T): T {
@@ -238,7 +246,7 @@ describe("Minimal KeyboardFiler (Native Overlap)", () => {
       expect(filer.isFilerActive()).toBe(false);
     });
 
-    it("intercepts Enter on file to open it and stop filer, blocking default rename", async () => {
+    it("intercepts Enter on file to open it with active: false, keeping filer mode active", async () => {
       const filer = new KeyboardFiler(app);
       const container = new MockDomNode(["nav-files-container"]);
       const fileTitle = new MockDomNode(["nav-file-title"], { "data-path": "Notes/Test.md" });
@@ -249,14 +257,18 @@ describe("Minimal KeyboardFiler (Native Overlap)", () => {
       };
 
       const mockLeaf = { view: { containerEl: container as unknown as HTMLElement } };
-      app.workspace.getLeavesOfType = vi.fn().mockReturnValue([mockLeaf]);
+      app.workspace.getLeavesOfType = vi.fn().mockImplementation((type: string) => {
+        if (type === "file-explorer") return [mockLeaf];
+        return [];
+      });
 
       const testFile = new TFile();
       testFile.path = "Notes/Test.md";
       app.vault.getAbstractFileByPath = vi.fn().mockReturnValue(testFile);
 
       const openFileMock = vi.fn().mockResolvedValue(undefined);
-      app.workspace.getLeaf = vi.fn().mockReturnValue({ openFile: openFileMock });
+      const mockEditorLeaf = { openFile: openFileMock, view: {} };
+      app.workspace.getLeaf = vi.fn().mockReturnValue(mockEditorLeaf);
 
       filer.start();
 
@@ -271,10 +283,32 @@ describe("Minimal KeyboardFiler (Native Overlap)", () => {
       expect(handled).toBe(true);
       expect(enterEvent.preventDefault).toHaveBeenCalled();
       expect(enterEvent.stopImmediatePropagation).toHaveBeenCalled();
-      expect(openFileMock).toHaveBeenCalledWith(testFile);
+      expect(openFileMock).toHaveBeenCalledWith(testFile, { active: false });
+
+      // Filer mode must stay ACTIVE for continuous preview
+      expect(filer.isFilerActive()).toBe(true);
+      expect(filer.getLastPreviewedLeaf()).toBe(mockEditorLeaf);
 
       await Promise.resolve();
-      expect(filer.isFilerActive()).toBe(false);
+      expect(filer.isFilerActive()).toBe(true);
+      expect(fileTitle.focused).toBe(true);
+    });
+
+    it("sets tabindex and selection classes when activeItem has no tabindex (unopened state)", () => {
+      const filer = new KeyboardFiler(app);
+      const container = new MockDomNode(["nav-files-container"]);
+      const fileTitle = new MockDomNode(["nav-file-title"]);
+      container.appendChild(fileTitle);
+
+      const mockLeaf = { view: { containerEl: container as unknown as HTMLElement } };
+      app.workspace.getLeavesOfType = vi.fn().mockReturnValue([mockLeaf]);
+
+      filer.start();
+
+      expect(fileTitle.getAttribute("tabindex")).toBe("-1");
+      expect(fileTitle.classList.contains("has-focus")).toBe(true);
+      expect(fileTitle.classList.contains("is-selected")).toBe(true);
+      expect(fileTitle.focused).toBe(true);
     });
 
     it("intercepts Enter on folder to toggle collapse safely without renaming", () => {
@@ -331,6 +365,48 @@ describe("Minimal KeyboardFiler (Native Overlap)", () => {
       expect(escEvent.preventDefault).toHaveBeenCalled();
       expect(escEvent.stopImmediatePropagation).toHaveBeenCalled();
       expect(filer.isFilerActive()).toBe(false);
+    });
+
+    it("restores focus to lastPreviewedLeaf on stop when previousActiveLeaf is null", () => {
+      const filer = new KeyboardFiler(app);
+      const container = new MockDomNode(["nav-files-container"]);
+      const mockLeaf = { view: { containerEl: container as unknown as HTMLElement } };
+      app.workspace.getLeavesOfType = vi.fn().mockImplementation((type: string) => {
+        if (type === "file-explorer") return [mockLeaf];
+        return [];
+      });
+
+      // Start filer without previous active leaf (unopened state)
+      app.workspace.getActiveViewOfType = vi.fn().mockReturnValue(null);
+      filer.start();
+
+      const testFile = new TFile();
+      testFile.path = "Notes/Test.md";
+      app.vault.getAbstractFileByPath = vi.fn().mockReturnValue(testFile);
+
+      const mockEditorLeaf = { openFile: vi.fn().mockResolvedValue(undefined), view: {} };
+      app.workspace.getLeaf = vi.fn().mockReturnValue(mockEditorLeaf);
+
+      const fileTitle = new MockDomNode(["nav-file-title"], { "data-path": "Notes/Test.md" });
+      container.appendChild(fileTitle);
+      (global as unknown as { document: unknown }).document = { activeElement: fileTitle };
+
+      const enterEvent = {
+        key: "Enter",
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+        stopImmediatePropagation: vi.fn(),
+      } as unknown as KeyboardEvent;
+      filer.handleKey(enterEvent, container as unknown as HTMLElement);
+
+      expect(filer.getLastPreviewedLeaf()).toBe(mockEditorLeaf);
+
+      // Now stop with restoreFocus = true (e.g. via Escape or exit command)
+      const setActiveLeafSpy = vi.spyOn(app.workspace, "setActiveLeaf");
+      filer.stop(true);
+
+      expect(setActiveLeafSpy).toHaveBeenCalledWith(mockEditorLeaf, { focus: true });
+      expect(filer.getLastPreviewedLeaf()).toBeNull();
     });
 
     it("passes through Arrow keys to let native Obsidian navigation handle them", () => {

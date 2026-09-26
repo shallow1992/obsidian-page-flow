@@ -9,6 +9,7 @@ export const ja: TranslationStrings = {
     goToNextFile: "フォルダ内の次のファイルへ移動",
     goToPrevFile: "フォルダ内の前のファイルへ移動",
     focusFileExplorer: "ファイルエクスプローラーにフォーカス（ファイラーモード）",
+    exitFileExplorer: "ファイラーモードを終了（エディタにフォーカス）",
   },
   settings: {
     title: "Page Flow 設定",

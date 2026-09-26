@@ -71,6 +71,7 @@ export class KeyboardFiler {
   private isActive = false;
   private keyListener: ((e: KeyboardEvent) => void) | null = null;
   private previousActiveLeaf: WorkspaceLeaf | null = null;
+  private lastPreviewedLeaf: WorkspaceLeaf | null = null;
   private isCancellingRename = false;
 
   constructor(app: App) {
@@ -79,6 +80,10 @@ export class KeyboardFiler {
 
   public isFilerActive(): boolean {
     return this.isActive;
+  }
+
+  public getLastPreviewedLeaf(): WorkspaceLeaf | null {
+    return this.lastPreviewedLeaf;
   }
 
   /**
@@ -122,8 +127,14 @@ export class KeyboardFiler {
     const activeItem =
       containerEl.querySelector<HTMLElement>(".nav-file-title.is-active, .tree-item-self.is-active") ||
       containerEl.querySelector<HTMLElement>(".nav-file-title, .nav-folder-title, .tree-item-self");
-    if (activeItem && typeof activeItem.focus === "function") {
-      activeItem.focus();
+    if (activeItem) {
+      if (!activeItem.hasAttribute("tabindex")) {
+        activeItem.setAttribute("tabindex", "-1");
+      }
+      activeItem.classList.add("has-focus", "is-selected");
+      if (typeof activeItem.focus === "function") {
+        activeItem.focus();
+      }
     }
 
     this.isActive = true;
@@ -140,15 +151,17 @@ export class KeyboardFiler {
     this.unregisterKeyListener();
     this.isActive = false;
 
-    if (restoreFocus && this.previousActiveLeaf) {
+    const targetLeaf = this.previousActiveLeaf || this.lastPreviewedLeaf;
+    if (restoreFocus && targetLeaf) {
       try {
-        this.app.workspace.setActiveLeaf(this.previousActiveLeaf, { focus: true });
+        this.app.workspace.setActiveLeaf(targetLeaf, { focus: true });
       } catch {
         // Ignore
       }
     }
 
     this.previousActiveLeaf = null;
+    this.lastPreviewedLeaf = null;
   }
 
   /**
@@ -183,14 +196,20 @@ export class KeyboardFiler {
         return true;
       }
 
-      // Otherwise, it's a file: open it and restore focus to editor
+      // Otherwise, it's a file: open it without exiting filer mode
       if (itemPath) {
         const file = this.app.vault.getAbstractFileByPath(itemPath);
         if (file instanceof TFile) {
-          void this.app.workspace.getLeaf(false).openFile(file).then(() => {
-            this.stop(true);
-          });
-          return true;
+          const editorLeaf = this.getOrCreateEditorLeaf();
+          if (editorLeaf) {
+            this.lastPreviewedLeaf = editorLeaf;
+            void editorLeaf.openFile(file, { active: false }).then(() => {
+              if (item && typeof item.focus === "function") {
+                item.focus();
+              }
+            });
+            return true;
+          }
         }
       }
 
@@ -318,6 +337,17 @@ export class KeyboardFiler {
       window.removeEventListener("keyup", this.keyListener, true);
       this.keyListener = null;
     }
+  }
+
+  private getOrCreateEditorLeaf(): WorkspaceLeaf | null {
+    if (this.previousActiveLeaf && this.previousActiveLeaf.view) {
+      return this.previousActiveLeaf;
+    }
+    const mdLeaves = this.app.workspace.getLeavesOfType("markdown");
+    if (mdLeaves.length > 0) {
+      return mdLeaves[0];
+    }
+    return this.app.workspace.getLeaf(false);
   }
 
   private getExplorerLeaf(): WorkspaceLeaf | null {

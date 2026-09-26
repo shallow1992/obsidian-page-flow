@@ -7,6 +7,7 @@ export const en = {
     goToNextFile: "Go to next file in folder",
     goToPrevFile: "Go to previous file in folder",
     focusFileExplorer: "Focus file explorer (Filer mode)",
+    exitFileExplorer: "Exit filer mode (Focus editor)",
   },
   settings: {
     title: "Page Flow Settings",
