@@ -72,6 +72,7 @@ export class KeyboardFiler {
   private isActive = false;
   private keyListener: ((e: KeyboardEvent) => void) | null = null;
   private previousActiveLeaf: WorkspaceLeaf | null = null;
+  private isCancellingRename = false;
 
   constructor(app: App) {
     this.app = app;
@@ -160,6 +161,9 @@ export class KeyboardFiler {
    */
   public handleKey(e: KeyboardEvent, containerEl: HTMLElement): boolean {
     if (!this.isActive) return false;
+    if (this.isCancellingRename || (e as unknown as { isCancelRename?: boolean }).isCancelRename) {
+      return false;
+    }
 
     if (e.key === "Enter") {
       // Completely block Enter from triggering Obsidian's rename
@@ -250,6 +254,7 @@ export class KeyboardFiler {
 
     if (renameInput) {
       debugLog("KeyboardFiler: Aborting native rename input element.");
+      this.isCancellingRename = true;
       try {
         let escEvent: Event;
         if (typeof KeyboardEvent === "function") {
@@ -266,10 +271,13 @@ export class KeyboardFiler {
             cancelable: true,
           } as unknown as Event;
         }
+        (escEvent as unknown as { isCancelRename?: boolean }).isCancelRename = true;
         renameInput.dispatchEvent(escEvent);
         renameInput.blur();
       } catch {
         // Ignore
+      } finally {
+        this.isCancellingRename = false;
       }
     }
 

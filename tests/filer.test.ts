@@ -371,5 +371,40 @@ describe("Minimal KeyboardFiler (Native Overlap)", () => {
       expect(folderTitle.focused).toBe(true);
       expect(input.dispatchedEvents.length).toBe(1);
     });
+
+    it("intercepts Enter on folder and cancels rename without exiting filer mode", () => {
+      const filer = new KeyboardFiler(app);
+      const container = new MockDomNode(["nav-files-container"]);
+      const folder = new MockDomNode(["nav-folder"]);
+      const folderTitle = new MockDomNode(
+        ["tree-item-self", "nav-folder-title", "is-being-renamed"],
+        { "data-path": "my-folder" }
+      );
+      const input = new MockDomNode(["nav-folder-title-content"], {}, "input");
+      folderTitle.appendChild(input);
+      folder.appendChild(folderTitle);
+      container.appendChild(folder);
+
+      const mockLeaf = { view: { containerEl: container as unknown as HTMLElement } };
+      app.workspace.getLeavesOfType = vi.fn().mockReturnValue([mockLeaf]);
+      const setActiveLeafSpy = vi.spyOn(app.workspace, "setActiveLeaf");
+
+      filer.start();
+      expect(filer.isFilerActive()).toBe(true);
+
+      const enterEvent = {
+        key: "Enter",
+        preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
+        stopImmediatePropagation: vi.fn(),
+      } as unknown as KeyboardEvent;
+
+      const handled = filer.handleKey(enterEvent, container as unknown as HTMLElement);
+      expect(handled).toBe(true);
+      // Crucial: Filer must NOT have stopped due to the Escape event dispatched to abort rename!
+      expect(filer.isFilerActive()).toBe(true);
+      // setActiveLeaf should NOT be called to restore previous leaf (which would force open a file)
+      expect(setActiveLeafSpy).toHaveBeenCalledTimes(1); // Only the initial activation in start()
+    });
   });
 });
