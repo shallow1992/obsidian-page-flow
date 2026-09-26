@@ -187,8 +187,25 @@ export class KeyboardFiler {
       // Check if item is a folder
       if (isFolderElement(item, this.app)) {
         debugLog(`KeyboardFiler: Folder detected (${itemPath}). Toggling collapse without renaming.`);
+
+        // Abort any in-flight rename triggered by native Obsidian
+        this.cancelRename(containerEl, item);
+
+        // Toggle folder collapse state safely
         this.toggleFolder(item);
-        // Do NOT stop filer mode! Keep filer active so user can continue navigating.
+
+        // Double check on next frame to eradicate any delayed rename input
+        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+          window.requestAnimationFrame(() => {
+            this.cancelRename(containerEl, item);
+          });
+        } else {
+          setTimeout(() => {
+            this.cancelRename(containerEl, item);
+          }, 0);
+        }
+
+        // Keep filer mode active so user can continue navigating
         return true;
       }
 
@@ -218,6 +235,53 @@ export class KeyboardFiler {
     }
 
     return false;
+  }
+
+  /**
+   * Immediately aborts and cleans up any rename mode started by native Obsidian.
+   */
+  public cancelRename(containerEl: HTMLElement, item: HTMLElement): void {
+    // 1. Dispatch Escape on rename input if present
+    const renameInput =
+      item.querySelector<HTMLInputElement>("input, [contenteditable='true']") ||
+      containerEl.querySelector<HTMLInputElement>(
+        ".is-being-renamed input, input.nav-folder-title-content, input"
+      );
+
+    if (renameInput) {
+      debugLog("KeyboardFiler: Aborting native rename input element.");
+      try {
+        let escEvent: Event;
+        if (typeof KeyboardEvent === "function") {
+          escEvent = new KeyboardEvent("keydown", {
+            key: "Escape",
+            bubbles: true,
+            cancelable: true,
+          });
+        } else {
+          escEvent = {
+            type: "keydown",
+            key: "Escape",
+            bubbles: true,
+            cancelable: true,
+          } as unknown as Event;
+        }
+        renameInput.dispatchEvent(escEvent);
+        renameInput.blur();
+      } catch {
+        // Ignore
+      }
+    }
+
+    // 2. Remove is-being-renamed class
+    item.classList.remove("is-being-renamed");
+    const parentFolder = item.closest(".nav-folder");
+    parentFolder?.classList.remove("is-being-renamed");
+
+    // 3. Ensure focus stays on item
+    if (typeof item.focus === "function") {
+      item.focus();
+    }
   }
 
   /**

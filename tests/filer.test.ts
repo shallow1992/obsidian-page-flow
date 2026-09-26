@@ -36,8 +36,10 @@ class MockDomNode {
   children: MockDomNode[] = [];
   clicked = false;
   focused = false;
+  tagName: string;
 
-  constructor(classNames: string[] = [], attrs: Record<string, string> = {}) {
+  constructor(classNames: string[] = [], attrs: Record<string, string> = {}, tagName = "div") {
+    this.tagName = tagName.toUpperCase();
     this.classList = new MockClassList(classNames);
     this.attributes = new Map(Object.entries(attrs));
   }
@@ -58,6 +60,16 @@ class MockDomNode {
 
   focus(): void {
     this.focused = true;
+  }
+
+  blur(): void {
+    this.focused = false;
+  }
+
+  dispatchedEvents: unknown[] = [];
+  dispatchEvent(event: unknown): boolean {
+    this.dispatchedEvents.push(event);
+    return true;
   }
 
   contains(child: MockDomNode): boolean {
@@ -88,7 +100,10 @@ class MockDomNode {
     const subSelectors = selector.split(",").map((s) => s.trim());
     const matchesNode = (node: MockDomNode): boolean => {
       for (const sub of subSelectors) {
-        const cleanSub = sub.replace(/:focus/g, "");
+        const cleanSub = sub.replace(/:focus/g, "").trim();
+        if (cleanSub.toLowerCase() === node.tagName.toLowerCase()) {
+          return true;
+        }
         const classes = cleanSub.split(".").filter(Boolean);
         if (classes.length > 0 && classes.every((c) => node.classList.contains(c))) {
           return true;
@@ -337,6 +352,24 @@ describe("Minimal KeyboardFiler (Native Overlap)", () => {
       const handled = filer.handleKey(arrowDownEvent, container as unknown as HTMLElement);
       expect(handled).toBe(false);
       expect(arrowDownEvent.preventDefault).not.toHaveBeenCalled();
+    });
+
+    it("cancels native rename and removes is-being-renamed class", () => {
+      const filer = new KeyboardFiler(app);
+      const container = new MockDomNode(["nav-files-container"]);
+      const folder = new MockDomNode(["nav-folder", "is-being-renamed"]);
+      const folderTitle = new MockDomNode(["tree-item-self", "nav-folder-title", "is-being-renamed"]);
+      const input = new MockDomNode(["nav-folder-title-content"], {}, "input");
+      folderTitle.appendChild(input);
+      folder.appendChild(folderTitle);
+      container.appendChild(folder);
+
+      filer.cancelRename(container as unknown as HTMLElement, folderTitle as unknown as HTMLElement);
+
+      expect(folderTitle.classList.contains("is-being-renamed")).toBe(false);
+      expect(folder.classList.contains("is-being-renamed")).toBe(false);
+      expect(folderTitle.focused).toBe(true);
+      expect(input.dispatchedEvents.length).toBe(1);
     });
   });
 });
