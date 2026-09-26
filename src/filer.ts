@@ -1,5 +1,4 @@
 import { App, TFile, TFolder, WorkspaceLeaf } from "obsidian";
-import { debugLog } from "./logger";
 
 /**
  * Helper: finds the currently focused, selected, or active file/folder element in the explorer container.
@@ -88,7 +87,6 @@ export class KeyboardFiler {
   public start(): boolean {
     const explorerLeaf = this.getExplorerLeaf();
     if (!explorerLeaf) {
-      debugLog("KeyboardFiler: File explorer leaf not found.");
       return false;
     }
 
@@ -107,7 +105,6 @@ export class KeyboardFiler {
 
     const containerEl = explorerLeaf.view?.containerEl;
     if (!containerEl) {
-      debugLog("KeyboardFiler: Explorer containerEl not found.");
       return false;
     }
 
@@ -131,7 +128,6 @@ export class KeyboardFiler {
 
     this.isActive = true;
     this.registerKeyListener(containerEl);
-    debugLog("KeyboardFiler: Started native overlap mode.");
     return true;
   }
 
@@ -153,7 +149,6 @@ export class KeyboardFiler {
     }
 
     this.previousActiveLeaf = null;
-    debugLog("KeyboardFiler: Stopped filer mode.");
   }
 
   /**
@@ -177,44 +172,18 @@ export class KeyboardFiler {
         item?.closest("[data-path]")?.getAttribute("data-path") ||
         "";
 
-      debugLog(
-        `KeyboardFiler: Enter key intercepted! itemFound=${Boolean(item)}, ` +
-          `tagName=${item?.tagName}, classList=${Array.from(item?.classList || []).join(" ")}, ` +
-          `path=${itemPath}`
-      );
-
       if (!item) {
-        debugLog("KeyboardFiler: No item found in explorer, ignoring Enter.");
         return true;
       }
 
-      // Check if item is a folder
+      // Check if item is a folder: safely toggle collapse without renaming
       if (isFolderElement(item, this.app)) {
-        debugLog(`KeyboardFiler: Folder detected (${itemPath}). Toggling collapse without renaming.`);
-
-        // Abort any in-flight rename triggered by native Obsidian
         this.cancelRename(containerEl, item);
-
-        // Toggle folder collapse state safely
         this.toggleFolder(item);
-
-        // Double check on next frame to eradicate any delayed rename input
-        if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
-          window.requestAnimationFrame(() => {
-            this.cancelRename(containerEl, item);
-          });
-        } else {
-          setTimeout(() => {
-            this.cancelRename(containerEl, item);
-          }, 0);
-        }
-
-        // Keep filer mode active so user can continue navigating
         return true;
       }
 
       // Otherwise, it's a file: open it and restore focus to editor
-      debugLog(`KeyboardFiler: File detected (${itemPath}). Opening file.`);
       if (itemPath) {
         const file = this.app.vault.getAbstractFileByPath(itemPath);
         if (file instanceof TFile) {
@@ -233,7 +202,6 @@ export class KeyboardFiler {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
-      debugLog("KeyboardFiler: Escape intercepted, stopping filer mode.");
       this.stop(true);
       return true;
     }
@@ -253,7 +221,6 @@ export class KeyboardFiler {
       );
 
     if (renameInput) {
-      debugLog("KeyboardFiler: Aborting native rename input element.");
       this.isCancellingRename = true;
       try {
         let escEvent: Event;
@@ -302,7 +269,7 @@ export class KeyboardFiler {
       folderEl.getAttribute("data-path") ||
       folderEl.querySelector("[data-path]")?.getAttribute("data-path");
 
-    // 1. Try Obsidian internal fileItem API (safest: no DOM click events, zero rename risk)
+    // 1. Preferred: Obsidian internal fileItem API (safe, no DOM clicks)
     const explorerLeaf = this.getExplorerLeaf();
     interface ExplorerFileItem {
       setCollapsed?: (val: boolean) => void;
@@ -311,24 +278,17 @@ export class KeyboardFiler {
     const fileItems = (explorerLeaf?.view as unknown as { fileItems?: Record<string, ExplorerFileItem> })?.fileItems;
     if (path && fileItems && fileItems[path] && typeof fileItems[path].setCollapsed === "function") {
       const currentCollapsed = Boolean(fileItems[path].collapsed);
-      debugLog(`KeyboardFiler: Using fileItems API for '${path}', setCollapsed(${!currentCollapsed})`);
       fileItems[path].setCollapsed?.(!currentCollapsed);
       return;
     }
 
-    // 2. DOM fallback: click only the collapse arrow indicator icon, NEVER the title itself!
+    // 2. Fallback: click only the collapse arrow indicator icon
     const indicator = folderEl.querySelector<HTMLElement>(
       ".nav-folder-collapse-indicator, .collapse-icon, .tree-item-icon"
     );
     if (indicator && typeof indicator.click === "function") {
-      debugLog(`KeyboardFiler: Clicking collapse indicator for '${path}'`);
       indicator.click();
-      return;
     }
-
-    // 3. Fallback: toggle is-collapsed class
-    debugLog(`KeyboardFiler: Toggling is-collapsed class for '${path}'`);
-    folderEl.classList.toggle("is-collapsed");
   }
 
   private registerKeyListener(containerEl: HTMLElement): void {
