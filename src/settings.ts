@@ -1,7 +1,9 @@
-import { App, Notice, Platform, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, Platform, PluginSettingTab, Setting, type SettingDefinitionItem } from "obsidian";
 import type PageFlowPlugin from "./main";
 import { PageFlowSettings, SortOrder } from "./types";
 import { t } from "./i18n";
+
+type SettingKey = Extract<keyof PageFlowSettings, string>;
 
 export const DEFAULT_SETTINGS: PageFlowSettings = {
   scrollPercentage: 85,
@@ -38,6 +40,115 @@ export class PageFlowSettingTab extends PluginSettingTab {
   constructor(app: App, plugin: PageFlowPlugin) {
     super(app, plugin);
     this.plugin = plugin;
+  }
+
+  override getControlValue(key: SettingKey): unknown {
+    return this.plugin.settings[key];
+  }
+
+  override async setControlValue(key: SettingKey, value: unknown): Promise<void> {
+    if (key === "sortOrder") {
+      this.plugin.settings.sortOrder = value as SortOrder;
+    } else if (key === "smoothScroll" || key === "loopFolder") {
+      this.plugin.settings[key] = Boolean(value);
+    } else {
+      (this.plugin.settings as unknown as Record<string, unknown>)[key] = Number(value);
+    }
+    await this.plugin.saveSettings();
+  }
+
+  override getSettingDefinitions(): SettingDefinitionItem<SettingKey>[] {
+    const strings = t().settings;
+    return [
+      {
+        type: "group",
+        heading: strings.title,
+        items: [
+          {
+            name: strings.scrollAmount.name,
+            desc: strings.scrollAmount.desc,
+            control: {
+              type: "slider",
+              key: "scrollPercentage",
+              min: 10,
+              max: 100,
+              step: 5,
+            },
+          },
+          {
+            name: strings.smoothScroll.name,
+            desc: strings.smoothScroll.desc,
+            control: { type: "toggle", key: "smoothScroll" },
+          },
+          {
+            name: strings.scrollDuration.name,
+            desc: strings.scrollDuration.desc,
+            control: {
+              type: "slider",
+              key: "scrollDuration",
+              min: 100,
+              max: 1000,
+              step: 20,
+            },
+          },
+          {
+            name: strings.maxQueuedScreens.name,
+            desc: strings.maxQueuedScreens.desc,
+            control: {
+              type: "slider",
+              key: "maxQueuedScreens",
+              min: 1.0,
+              max: 15.0,
+              step: 0.5,
+            },
+          },
+          {
+            name: strings.maxVelocityMultiplier.name,
+            desc: strings.maxVelocityMultiplier.desc,
+            control: {
+              type: "slider",
+              key: "maxVelocityMultiplier",
+              min: 1.0,
+              max: 5.0,
+              step: 0.1,
+            },
+          },
+          {
+            name: strings.sortOrder.name,
+            desc: strings.sortOrder.desc,
+            control: {
+              type: "dropdown",
+              key: "sortOrder",
+              options: {
+                "file-explorer": strings.sortOrder.options.fileExplorer,
+                "name-asc": strings.sortOrder.options.nameAsc,
+                "name-desc": strings.sortOrder.options.nameDesc,
+                "ctime-desc": strings.sortOrder.options.ctimeDesc,
+                "ctime-asc": strings.sortOrder.options.ctimeAsc,
+                "mtime-desc": strings.sortOrder.options.mtimeDesc,
+                "mtime-asc": strings.sortOrder.options.mtimeAsc,
+              },
+            },
+          },
+          {
+            name: strings.loopFolder.name,
+            desc: strings.loopFolder.desc,
+            control: { type: "toggle", key: "loopFolder" },
+          },
+          {
+            name: strings.boundaryThreshold.name,
+            desc: strings.boundaryThreshold.desc,
+            control: {
+              type: "slider",
+              key: "thresholdPx",
+              min: 0,
+              max: 50,
+              step: 5,
+            },
+          },
+        ],
+      },
+    ];
   }
 
   display(): void {
@@ -215,7 +326,11 @@ export class PageFlowSettingTab extends PluginSettingTab {
         button.onClick(async () => {
           this.plugin.settings = Object.assign({}, DEFAULT_SETTINGS);
           await this.plugin.saveSettings();
-          this.display();
+          if (typeof (this as any).update === "function") {
+            (this as any).update();
+          } else {
+            this.display();
+          }
           new Notice(t().notices.settingsReset);
         });
       });
