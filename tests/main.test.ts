@@ -14,8 +14,8 @@ describe("PageFlowPlugin main commands", () => {
     plugin = new PageFlowPlugin(app, {
       id: "page-flow",
       name: "Page Flow",
-      version: "0.1.0",
-      minAppVersion: "1.4.0",
+      version: "0.1.1",
+      minAppVersion: "1.13.0",
       description: "Test plugin",
       author: "Test",
     } as any);
