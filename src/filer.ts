@@ -1,4 +1,4 @@
-import { App, TFile, TFolder, WorkspaceLeaf } from "obsidian";
+import { App, MarkdownView, TFile, TFolder, WorkspaceLeaf } from "obsidian";
 
 /**
  * Helper: finds the currently focused, selected, or active file/folder element in the explorer container.
@@ -90,8 +90,9 @@ export class KeyboardFiler {
       return false;
     }
 
-    // Remember editor leaf to restore focus on exit
-    this.previousActiveLeaf = this.app.workspace.activeLeaf;
+    // Remember editor view's leaf to restore focus on exit (avoid deprecated workspace.activeLeaf)
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    this.previousActiveLeaf = activeView?.leaf ?? null;
 
     // Expand left sidebar if collapsed
     const leftSplit = this.app.workspace.leftSplit as { collapsed?: boolean; expand?: () => void } | undefined;
@@ -100,7 +101,6 @@ export class KeyboardFiler {
     }
 
     // Activate and focus file explorer leaf
-    this.app.workspace.revealLeaf(explorerLeaf);
     this.app.workspace.setActiveLeaf(explorerLeaf, { focus: true });
 
     const containerEl = explorerLeaf.view?.containerEl;
