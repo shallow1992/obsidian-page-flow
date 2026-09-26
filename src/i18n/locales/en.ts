@@ -16,7 +16,7 @@ export const en = {
     },
     scrollAmount: {
       name: "Scroll amount (%)",
-      desc: "Percentage of the screen height to scroll on each step (recommended: 80-90%).",
+      desc: "Percentage of the screen height to scroll on each step (recommended: 80-90% for page reading, 15-30% for fine adjustment with rapid chaining).",
     },
     smoothScroll: {
       name: "Smooth scrolling",
