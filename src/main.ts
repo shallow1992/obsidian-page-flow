@@ -112,6 +112,19 @@ export default class PageFlowPlugin extends Plugin {
         return true;
       },
     });
+
+    // 7. Navigation: Show file explorer
+    this.addCommand({
+      id: "show-file-explorer",
+      name: strings.commands.showFileExplorer,
+      callback: () => {
+        const leaves = this.app.workspace.getLeavesOfType("file-explorer");
+        if (leaves.length > 0) {
+          void this.app.workspace.revealLeaf(leaves[0]);
+          this.app.workspace.setActiveLeaf(leaves[0], { focus: true });
+        }
+      },
+    });
   }
 
   onunload(): void {

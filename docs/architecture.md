@@ -156,3 +156,26 @@ src/
     - **2回目の逆方向入力**: 停止位置を基点として、通常通り「逆方向へのスクロールを開始」。
     - これにより、キーボードから手を離さずに、行き過ぎの素早いキャンセルと微小な巻き戻しをストレスなく行える操作性を実現。
 
+---
+
+## 8. ファイルエクスプローラー表示コマンドの統合 (Show File Explorer Command)
+
+- **背景・課題**:
+  - Obsidian 標準にも「ファイルエクスプローラ: ファイルエクスプローラを表示」コマンドが存在するが、ホットキー設定画面で `Page Flow` と検索した際に一覧に表示されないため、ユーザーが一箇所でまとめてホットキーを設定しづらい摩擦があった。
+- **設計判断（100% ネイティブ委任 ＆ 安全な公式 API ラッパー）**:
+  - Page Flow のコマンドとして `Page Flow: ファイルエクスプローラーを表示`（`show-file-explorer`）を提供。
+  - プラグイン内部では、Obsidian 公式の公開 API のみを使用：
+    ```typescript
+    const leaves = this.app.workspace.getLeavesOfType("file-explorer");
+    if (leaves.length > 0) {
+      void this.app.workspace.revealLeaf(leaves[0]);
+      this.app.workspace.setActiveLeaf(leaves[0], { focus: true });
+    }
+    ```
+- **アーキテクチャ上の利点**:
+  1. **キー横取りゼロ（完全ネイティブ調和）**:
+     - キーボードの `Enter` や `Esc` のイベントリスナー・フックを一切設けないため、macOS の標準仕様（アイテム選択時の `Enter` でインラインリネーム）や Windows の仕様と 100% 調和し、OS や Obsidian 本体のアップデートで壊れるリスクがゼロ。
+  2. **ホットキー設定の認知負荷軽減**:
+     - ホットキー設定画面で `Page Flow` と検索するだけで、スクロールやファイル遷移とあわせて本コマンドが表示され、直感的にホットキーを割り当てられる。
+
+
