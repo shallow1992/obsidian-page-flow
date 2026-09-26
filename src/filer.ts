@@ -2,30 +2,53 @@ import { App, TFile, WorkspaceLeaf } from "obsidian";
 import { debugLog } from "./logger";
 
 /**
- * Helper: finds the currently focused or active file/folder title in the explorer container.
+ * Helper: finds the currently focused, selected, or active file/folder element in the explorer container.
+ * Inspects browser focus, Obsidian's selection classes (.is-focused, .is-selected), and fallbacks.
  */
 export function getFocusedOrSelectedExplorerItem(containerEl: HTMLElement): HTMLElement | null {
-  // 1. Current focused element inside container
+  // 1. Browser activeElement inside container
   const activeEl = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
   if (activeEl && containerEl.contains(activeEl)) {
-    const item = activeEl.closest<HTMLElement>(".nav-file-title, .nav-folder-title");
+    const item = activeEl.closest<HTMLElement>(
+      ".nav-file-title, .nav-folder-title, .tree-item-self"
+    );
     if (item) return item;
   }
 
-  // 2. Focused selector
-  const focused = containerEl.querySelector<HTMLElement>(
-    ".nav-file-title:focus, .nav-folder-title:focus"
+  // 2. Obsidian's keyboard focus classes applied during arrow key navigation
+  const focusedByClass = containerEl.querySelector<HTMLElement>(
+    ".nav-file-title.is-focused, .nav-folder-title.is-focused, .tree-item-self.is-focused, " +
+      ".nav-file-title.is-selected, .nav-folder-title.is-selected, .tree-item-self.is-selected"
   );
-  if (focused) return focused;
+  if (focusedByClass) return focusedByClass;
 
-  // 3. Fallback: currently active file title
-  return containerEl.querySelector<HTMLElement>(".nav-file-title.is-active");
+  // 3. Browser :focus pseudo-class
+  const focusedPseudo = containerEl.querySelector<HTMLElement>(
+    ".nav-file-title:focus, .nav-folder-title:focus, .tree-item-self:focus"
+  );
+  if (focusedPseudo) return focusedPseudo;
+
+  // 4. Fallback: currently active file title
+  return containerEl.querySelector<HTMLElement>(
+    ".nav-file-title.is-active, .tree-item-self.is-active, .nav-file-title"
+  );
+}
+
+/**
+ * Helper: checks whether an item element represents a folder/directory.
+ */
+export function isFolderElement(item: HTMLElement): boolean {
+  if (item.classList.contains("nav-folder-title")) return true;
+  if (item.classList.contains("nav-folder")) return true;
+  const parentFolder = item.closest(".nav-folder");
+  const parentFile = item.closest(".nav-file");
+  return Boolean(parentFolder && !parentFile);
 }
 
 /**
  * Minimal Keyboard Filer:
- * Leverages Obsidian's native file explorer navigation and styles,
- * while intercepting Enter (to prevent rename and open file) and Escape (to restore editor focus).
+ * Overlaps Obsidian's native file explorer keyboard navigation,
+ * completely intercepting Enter (to prevent rename and toggle/open) and Escape (to restore editor focus).
  */
 export class KeyboardFiler {
   private app: App;
@@ -82,8 +105,8 @@ export class KeyboardFiler {
 
     // Set browser focus to the active or initial item
     const activeItem =
-      containerEl.querySelector<HTMLElement>(".nav-file-title.is-active") ||
-      containerEl.querySelector<HTMLElement>(".nav-file-title, .nav-folder-title");
+      containerEl.querySelector<HTMLElement>(".nav-file-title.is-active, .tree-item-self.is-active") ||
+      containerEl.querySelector<HTMLElement>(".nav-file-title, .nav-folder-title, .tree-item-self");
     if (activeItem && typeof activeItem.focus === "function") {
       activeItem.focus();
     }
@@ -122,8 +145,9 @@ export class KeyboardFiler {
     if (!this.isActive) return false;
 
     if (e.key === "Enter") {
-      // Intercept Enter: prevent rename trigger completely
+      // Completely block Enter from triggering Obsidian's rename
       e.preventDefault();
+      e.stopPropagation();
       e.stopImmediatePropagation();
 
       const item = getFocusedOrSelectedExplorerItem(containerEl);
@@ -132,38 +156,33 @@ export class KeyboardFiler {
         return true;
       }
 
-      // If it's a file, open it and restore focus to editor
-      if (item.classList.contains("nav-file-title")) {
-        const path = item.getAttribute("data-path");
-        if (path) {
-          const file = this.app.vault.getAbstractFileByPath(path);
-          if (file instanceof TFile) {
-            void this.app.workspace.getLeaf(false).openFile(file).then(() => {
-              this.stop(true);
-            });
-            return true;
-          }
-        }
-        this.stop(true);
+      // Check if item is a folder
+      if (isFolderElement(item)) {
+        this.toggleFolder(item);
         return true;
       }
 
-      // If it's a folder, toggle collapse safely without renaming
-      if (item.classList.contains("nav-folder-title")) {
-        const indicator = item.querySelector<HTMLElement>(".nav-folder-collapse-indicator");
-        if (indicator && typeof indicator.click === "function") {
-          indicator.click();
-        } else {
-          item.click();
+      // Otherwise, it's a file: open it and restore focus to editor
+      const path =
+        item.getAttribute("data-path") ||
+        item.closest("[data-path]")?.getAttribute("data-path");
+      if (path) {
+        const file = this.app.vault.getAbstractFileByPath(path);
+        if (file instanceof TFile) {
+          void this.app.workspace.getLeaf(false).openFile(file).then(() => {
+            this.stop(true);
+          });
+          return true;
         }
-        return true;
       }
 
+      this.stop(true);
       return true;
     }
 
     if (e.key === "Escape") {
       e.preventDefault();
+      e.stopPropagation();
       e.stopImmediatePropagation();
       this.stop(true);
       return true;
@@ -172,20 +191,66 @@ export class KeyboardFiler {
     return false;
   }
 
+  /**
+   * Safely toggles folder collapse state without triggering rename.
+   */
+  public toggleFolder(folderItem: HTMLElement): void {
+    const folderEl = folderItem.closest<HTMLElement>(".nav-folder") || folderItem;
+    const path =
+      folderItem.getAttribute("data-path") ||
+      folderEl.getAttribute("data-path") ||
+      folderEl.querySelector("[data-path]")?.getAttribute("data-path");
+
+    // 1. Try Obsidian internal fileItem API (safest, no click event)
+    const explorerLeaf = this.getExplorerLeaf();
+    interface ExplorerFileItem {
+      setCollapsed?: (val: boolean) => void;
+      collapsed?: boolean;
+    }
+    const fileItems = (explorerLeaf?.view as unknown as { fileItems?: Record<string, ExplorerFileItem> })?.fileItems;
+    if (path && fileItems && fileItems[path] && typeof fileItems[path].setCollapsed === "function") {
+      fileItems[path].setCollapsed(!fileItems[path].collapsed);
+      return;
+    }
+
+    // 2. DOM fallback: click only the collapse arrow icon, never the title itself
+    const indicator = folderEl.querySelector<HTMLElement>(
+      ".nav-folder-collapse-indicator, .collapse-icon, .tree-item-icon"
+    );
+    if (indicator && typeof indicator.click === "function") {
+      indicator.click();
+      return;
+    }
+
+    // 3. Fallback: toggle is-collapsed class directly
+    folderEl.classList.toggle("is-collapsed");
+  }
+
   private registerKeyListener(containerEl: HTMLElement): void {
     this.unregisterKeyListener();
 
     this.keyListener = (e: KeyboardEvent) => {
-      // Intercept only when inside file explorer
-      this.handleKey(e, containerEl);
+      if (this.isActive && (e.key === "Enter" || e.key === "Escape")) {
+        if (e.type === "keydown") {
+          this.handleKey(e, containerEl);
+        } else if (e.type === "keyup") {
+          // Block keyup as well so rename is never triggered on key release
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+        }
+      }
     };
 
+    // Intercept both keydown and keyup in capture phase
     window.addEventListener("keydown", this.keyListener, true);
+    window.addEventListener("keyup", this.keyListener, true);
   }
 
   private unregisterKeyListener(): void {
     if (this.keyListener) {
       window.removeEventListener("keydown", this.keyListener, true);
+      window.removeEventListener("keyup", this.keyListener, true);
       this.keyListener = null;
     }
   }

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getFocusedOrSelectedExplorerItem, KeyboardFiler } from "../src/filer";
+import { getFocusedOrSelectedExplorerItem, isFolderElement, KeyboardFiler } from "../src/filer";
 import { App, TFile } from "obsidian";
 
 class MockClassList {
@@ -18,6 +18,14 @@ class MockClassList {
   }
   has(cls: string): boolean {
     return this.set.has(cls);
+  }
+  toggle(cls: string): boolean {
+    if (this.set.has(cls)) {
+      this.set.delete(cls);
+      return false;
+    }
+    this.set.add(cls);
+    return true;
   }
 }
 
@@ -67,7 +75,7 @@ class MockDomNode {
     while (curr) {
       for (const sub of subSelectors) {
         const classes = sub.split(".").filter(Boolean);
-        if (classes.length > 0 && classes.every((c) => curr!.classList.has(c))) {
+        if (classes.length > 0 && classes.every((c) => curr!.classList.contains(c))) {
           return curr;
         }
       }
@@ -82,7 +90,7 @@ class MockDomNode {
       for (const sub of subSelectors) {
         const cleanSub = sub.replace(/:focus/g, "");
         const classes = cleanSub.split(".").filter(Boolean);
-        if (classes.length > 0 && classes.every((c) => node.classList.has(c))) {
+        if (classes.length > 0 && classes.every((c) => node.classList.contains(c))) {
           return true;
         }
       }
@@ -136,6 +144,22 @@ describe("Minimal KeyboardFiler (Native Overlap)", () => {
     (global as unknown as { document: unknown }).document = originalDocument;
   });
 
+  describe("isFolderElement", () => {
+    it("identifies folder elements correctly", () => {
+      const folder = new MockDomNode(["nav-folder"]);
+      const folderTitle = new MockDomNode(["nav-folder-title"]);
+      folder.appendChild(folderTitle);
+
+      const file = new MockDomNode(["nav-file"]);
+      const fileTitle = new MockDomNode(["nav-file-title"]);
+      file.appendChild(fileTitle);
+
+      expect(isFolderElement(folderTitle as unknown as HTMLElement)).toBe(true);
+      expect(isFolderElement(folder as unknown as HTMLElement)).toBe(true);
+      expect(isFolderElement(fileTitle as unknown as HTMLElement)).toBe(false);
+    });
+  });
+
   describe("getFocusedOrSelectedExplorerItem", () => {
     it("returns focused element inside container if present", () => {
       const container = new MockDomNode(["nav-files-container"]);
@@ -148,6 +172,19 @@ describe("Minimal KeyboardFiler (Native Overlap)", () => {
 
       const result = getFocusedOrSelectedExplorerItem(container as unknown as HTMLElement);
       expect(result).toBe(fileTitle);
+    });
+
+    it("finds item with Obsidian's .is-focused class", () => {
+      const container = new MockDomNode(["nav-files-container"]);
+      const folderTitle = new MockDomNode(["nav-folder-title", "is-focused"]);
+      container.appendChild(folderTitle);
+
+      (global as unknown as { document: unknown }).document = {
+        activeElement: null,
+      };
+
+      const result = getFocusedOrSelectedExplorerItem(container as unknown as HTMLElement);
+      expect(result).toBe(folderTitle);
     });
 
     it("falls back to .is-active file title when no element is focused", () => {
@@ -211,6 +248,7 @@ describe("Minimal KeyboardFiler (Native Overlap)", () => {
       const enterEvent = {
         key: "Enter",
         preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
         stopImmediatePropagation: vi.fn(),
       } as unknown as KeyboardEvent;
 
@@ -227,10 +265,12 @@ describe("Minimal KeyboardFiler (Native Overlap)", () => {
     it("intercepts Enter on folder to toggle collapse safely without renaming", () => {
       const filer = new KeyboardFiler(app);
       const container = new MockDomNode(["nav-files-container"]);
+      const folder = new MockDomNode(["nav-folder"]);
       const folderTitle = new MockDomNode(["nav-folder-title"]);
       const indicator = new MockDomNode(["nav-folder-collapse-indicator"]);
       folderTitle.appendChild(indicator);
-      container.appendChild(folderTitle);
+      folder.appendChild(folderTitle);
+      container.appendChild(folder);
 
       (global as unknown as { document: unknown }).document = {
         activeElement: folderTitle,
@@ -244,6 +284,7 @@ describe("Minimal KeyboardFiler (Native Overlap)", () => {
       const enterEvent = {
         key: "Enter",
         preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
         stopImmediatePropagation: vi.fn(),
       } as unknown as KeyboardEvent;
 
@@ -266,6 +307,7 @@ describe("Minimal KeyboardFiler (Native Overlap)", () => {
       const escEvent = {
         key: "Escape",
         preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
         stopImmediatePropagation: vi.fn(),
       } as unknown as KeyboardEvent;
 
@@ -287,6 +329,7 @@ describe("Minimal KeyboardFiler (Native Overlap)", () => {
       const arrowDownEvent = {
         key: "ArrowDown",
         preventDefault: vi.fn(),
+        stopPropagation: vi.fn(),
         stopImmediatePropagation: vi.fn(),
       } as unknown as KeyboardEvent;
 
