@@ -1,6 +1,6 @@
 {
   "name": "obsidian-page-flow",
-  "version": "1.0.3",
+  "version": "1.0.4-beta.1",
   "description": "Effortless note reading and triage in Obsidian. Scroll page-by-page and seamlessly transition to the next file with single hotkeys.",
   "main": "main.js",
   "scripts": {
