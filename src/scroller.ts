@@ -347,45 +347,10 @@ export function getScrollContainer(view: MarkdownView): HTMLElement | null {
   return view.contentEl.querySelector<HTMLElement>(".markdown-preview-view") || null;
 }
 
-interface ResolvedScrollOptions {
-  percentage: number;
-  isSmooth: boolean;
-  boundaryThreshold: number;
-  scrollDuration: number;
-  queuedScreens: number;
-  velocityMultiplier: number;
-}
-
-function resolveEffectiveScrollOptions(
-  percentageOrOptions: number | ScrollPhysicsOptions,
-  smooth: boolean,
-  threshold: number,
-  duration: number,
-  maxQueuedScreens: number,
-  maxVelocityMultiplier: number
-): ResolvedScrollOptions {
-  const opts: ScrollPhysicsOptions =
-    typeof percentageOrOptions === "object"
-      ? percentageOrOptions
-      : {
-          percentage: percentageOrOptions,
-          smooth,
-          threshold,
-          duration,
-          maxQueuedScreens,
-          maxVelocityMultiplier,
-        };
-
-  return {
-    percentage: opts.scrollPercentage ?? opts.percentage ?? 85,
-    isSmooth: opts.smoothScroll ?? opts.smooth ?? true,
-    boundaryThreshold: opts.thresholdPx ?? opts.threshold ?? 10,
-    scrollDuration: opts.scrollDuration ?? opts.duration ?? 280,
-    queuedScreens: opts.maxQueuedScreens ?? 5.0,
-    velocityMultiplier: opts.maxVelocityMultiplier ?? 2.2,
-  };
-}
-
+/**
+ * Scrolls the container downward by the configured percentage.
+ * Uses smart queuing smooth scroll with dynamic chained acceleration to resist CodeMirror 6 layout shifts.
+ */
 /**
  * Scrolls the container downward by the configured percentage or options.
  * Uses smart queuing smooth scroll with dynamic chained acceleration to resist CodeMirror 6 layout shifts.
@@ -399,21 +364,24 @@ export function scrollDown(
   maxQueuedScreens = 5.0,
   maxVelocityMultiplier = 2.2
 ): boolean {
-  const {
-    percentage,
-    isSmooth,
-    boundaryThreshold,
-    scrollDuration,
-    queuedScreens,
-    velocityMultiplier,
-  } = resolveEffectiveScrollOptions(
-    percentageOrOptions,
-    smooth,
-    threshold,
-    duration,
-    maxQueuedScreens,
-    maxVelocityMultiplier
-  );
+  const opts: ScrollPhysicsOptions =
+    typeof percentageOrOptions === "object"
+      ? percentageOrOptions
+      : {
+          percentage: percentageOrOptions,
+          smooth,
+          threshold,
+          duration,
+          maxQueuedScreens,
+          maxVelocityMultiplier,
+        };
+
+  const percentage = opts.scrollPercentage ?? opts.percentage ?? 85;
+  const isSmooth = opts.smoothScroll ?? opts.smooth ?? true;
+  const boundaryThreshold = opts.thresholdPx ?? opts.threshold ?? 10;
+  const scrollDuration = opts.scrollDuration ?? opts.duration ?? 280;
+  const queuedScreens = opts.maxQueuedScreens ?? 5.0;
+  const velocityMultiplier = opts.maxVelocityMultiplier ?? 2.2;
 
   const existing = activeAnimations.get(container);
 
@@ -478,21 +446,24 @@ export function scrollUp(
   maxQueuedScreens = 5.0,
   maxVelocityMultiplier = 2.2
 ): boolean {
-  const {
-    percentage,
-    isSmooth,
-    boundaryThreshold,
-    scrollDuration,
-    queuedScreens,
-    velocityMultiplier,
-  } = resolveEffectiveScrollOptions(
-    percentageOrOptions,
-    smooth,
-    threshold,
-    duration,
-    maxQueuedScreens,
-    maxVelocityMultiplier
-  );
+  const opts: ScrollPhysicsOptions =
+    typeof percentageOrOptions === "object"
+      ? percentageOrOptions
+      : {
+          percentage: percentageOrOptions,
+          smooth,
+          threshold,
+          duration,
+          maxQueuedScreens,
+          maxVelocityMultiplier,
+        };
+
+  const percentage = opts.scrollPercentage ?? opts.percentage ?? 85;
+  const isSmooth = opts.smoothScroll ?? opts.smooth ?? true;
+  const boundaryThreshold = opts.thresholdPx ?? opts.threshold ?? 10;
+  const scrollDuration = opts.scrollDuration ?? opts.duration ?? 280;
+  const queuedScreens = opts.maxQueuedScreens ?? 5.0;
+  const velocityMultiplier = opts.maxVelocityMultiplier ?? 2.2;
 
   const existing = activeAnimations.get(container);
 

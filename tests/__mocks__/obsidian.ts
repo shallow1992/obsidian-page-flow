@@ -14,18 +14,7 @@ export class App {
   workspace = {
     getActiveViewOfType: vi.fn(),
     getActiveFile: vi.fn(),
-    getLeaf: vi.fn().mockReturnValue({
-      openFile: vi.fn().mockResolvedValue(undefined),
-    }),
-    getLeavesOfType: vi.fn().mockReturnValue([]),
-    revealLeaf: vi.fn(),
-    setActiveLeaf: vi.fn(),
-    leftSplit: {
-      collapsed: false,
-      expand: vi.fn(),
-      collapse: vi.fn(),
-    },
-    activeLeaf: null as any,
+    getLeaf: vi.fn(),
     on: vi.fn(),
   };
   vault = {
