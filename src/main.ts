@@ -10,14 +10,17 @@ import {
   scrollUp,
 } from "./scroller";
 import { resolveNextFile, resolvePrevFile } from "./navigator";
+import { KeyboardFiler } from "./filer";
 import { t } from "./i18n";
-import { debugLog } from "./logger";
 
 export default class PageFlowPlugin extends Plugin {
   settings: PageFlowSettings = DEFAULT_SETTINGS;
+  private filer!: KeyboardFiler;
 
   async onload(): Promise<void> {
     await this.loadSettings();
+
+    this.filer = new KeyboardFiler(this.app);
 
     this.addSettingTab(new PageFlowSettingTab(this.app, this));
 
@@ -112,10 +115,20 @@ export default class PageFlowPlugin extends Plugin {
         return true;
       },
     });
+
+    // 7. Filer: Focus file explorer (Filer mode)
+    this.addCommand({
+      id: "focus-file-explorer",
+      name: strings.commands.focusFileExplorer,
+      callback: () => {
+        this.filer.start();
+      },
+    });
   }
 
   onunload(): void {
     cancelAllActiveAnimations();
+    this.filer?.stop(false);
   }
 
   async loadSettings(): Promise<void> {
@@ -134,7 +147,6 @@ export default class PageFlowPlugin extends Plugin {
     const scrolled = scrollDown(container, this.settings);
 
     if (!scrolled) {
-      debugLog("handleForward: scrollDown returned false -> triggering openNextFile");
       const currentFile = view.file;
       if (currentFile) {
         void this.openNextFile(currentFile);
@@ -149,7 +161,6 @@ export default class PageFlowPlugin extends Plugin {
     const scrolled = scrollUp(container, this.settings);
 
     if (!scrolled) {
-      debugLog("handleBackward: scrollUp returned false -> triggering openPrevFile");
       const currentFile = view.file;
       if (currentFile) {
         void this.openPrevFile(currentFile, true);

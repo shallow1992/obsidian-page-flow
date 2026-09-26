@@ -8,6 +8,7 @@ export const ja: TranslationStrings = {
     scrollPageUp: "1ページ上にスクロール",
     goToNextFile: "フォルダ内の次のファイルへ移動",
     goToPrevFile: "フォルダ内の前のファイルへ移動",
+    focusFileExplorer: "ファイルエクスプローラーにフォーカス（ファイラーモード）",
   },
   settings: {
     title: "Page Flow 設定",
