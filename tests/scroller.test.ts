@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   calculateChainedDuration,
   calculateScrollDelta,
@@ -10,7 +10,9 @@ import {
   easeInOutCubic,
   easeOutCubic,
   scrollDown,
+  scrollToTop,
   scrollUp,
+  smoothScrollBy,
   stopActiveAnimation,
 } from "../src/scroller";
 
@@ -222,6 +224,112 @@ describe("Scroller calculation logic", () => {
 
     it("safely handles cancelAllActiveAnimations when called", () => {
       expect(() => cancelAllActiveAnimations()).not.toThrow();
+    });
+  });
+
+  describe("Reversal brake mechanism", () => {
+    let originalWindow: typeof global.window;
+    let nextRafId = 1;
+    let cancelledRafIds: number[] = [];
+
+    beforeEach(() => {
+      originalWindow = global.window;
+      cancelledRafIds = [];
+      nextRafId = 1;
+
+      (global as unknown as { window: unknown }).window = {
+        requestAnimationFrame: () => nextRafId++,
+        cancelAnimationFrame: (id: number) => {
+          cancelledRafIds.push(id);
+        },
+      };
+    });
+
+    afterEach(() => {
+      cancelAllActiveAnimations();
+      (global as unknown as { window: unknown }).window = originalWindow;
+    });
+
+    it("immediately halts and returns true when scrollUp is called during scrollDown", () => {
+      const mockContainer = {
+        scrollTop: 100,
+        clientHeight: 800,
+        scrollHeight: 3000,
+      } as HTMLElement;
+
+      // Start scrolling down
+      const downResult = scrollDown(mockContainer, { percentage: 50, smooth: true });
+      expect(downResult).toBe(true);
+      expect(cancelledRafIds).toHaveLength(0);
+
+      // Reverse direction: press Up while downward animation is running
+      const upResult = scrollUp(mockContainer, { percentage: 50, smooth: true });
+
+      // Must return true to prevent triggering openPrevFile!
+      expect(upResult).toBe(true);
+      // Must have cancelled the active animation
+      expect(cancelledRafIds.length).toBeGreaterThan(0);
+
+      // Next scrollUp should now proceed normally
+      const secondUpResult = scrollUp(mockContainer, { percentage: 50, smooth: true });
+      expect(secondUpResult).toBe(true);
+    });
+
+    it("immediately halts and returns true when scrollDown is called during scrollUp", () => {
+      const mockContainer = {
+        scrollTop: 1000,
+        clientHeight: 800,
+        scrollHeight: 3000,
+      } as HTMLElement;
+
+      // Start scrolling up
+      const upResult = scrollUp(mockContainer, { percentage: 50, smooth: true });
+      expect(upResult).toBe(true);
+      expect(cancelledRafIds).toHaveLength(0);
+
+      // Reverse direction: press Down while upward animation is running
+      const downResult = scrollDown(mockContainer, { percentage: 50, smooth: true });
+
+      // Must return true to prevent triggering openNextFile!
+      expect(downResult).toBe(true);
+      // Must have cancelled the active animation
+      expect(cancelledRafIds.length).toBeGreaterThan(0);
+    });
+
+    it("halts animation inside smoothScrollBy when receiving opposite delta", () => {
+      const mockContainer = {
+        scrollTop: 500,
+        clientHeight: 800,
+        scrollHeight: 3000,
+      } as HTMLElement;
+
+      // Start downward smooth scroll
+      smoothScrollBy(mockContainer, 400);
+      expect(cancelledRafIds).toHaveLength(0);
+
+      // Reverse direction directly via smoothScrollBy
+      smoothScrollBy(mockContainer, -400);
+
+      // Must cancel animation
+      expect(cancelledRafIds.length).toBeGreaterThan(0);
+    });
+
+    it("does not engage brake when pressing the same direction consecutively", () => {
+      const mockContainer = {
+        scrollTop: 100,
+        clientHeight: 800,
+        scrollHeight: 3000,
+      } as HTMLElement;
+
+      // First down
+      expect(scrollDown(mockContainer, { percentage: 50, smooth: true })).toBe(true);
+      const initialCancels = cancelledRafIds.length;
+
+      // Consecutive down (rapid chaining in same direction)
+      expect(scrollDown(mockContainer, { percentage: 50, smooth: true })).toBe(true);
+
+      // Should NOT have cancelled active animation (it chained/extended target instead)
+      expect(cancelledRafIds.length).toBe(initialCancels);
     });
   });
 });

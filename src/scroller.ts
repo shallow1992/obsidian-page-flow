@@ -151,6 +151,18 @@ export function smoothScrollBy(
   const currentScroll = container.scrollTop;
   const now = typeof performance !== "undefined" ? performance.now() : Date.now();
 
+  // Reversal brake: If an animation in the opposite direction is active, immediately halt at current position
+  if (
+    existing &&
+    ((existing.delta > 0 && delta < 0) || (existing.delta < 0 && delta > 0))
+  ) {
+    debugLog(
+      `smoothScrollBy: Reversal brake engaged! Existing delta=${existing.delta}, new delta=${delta}. Stopping animation at currentScroll=${currentScroll}`
+    );
+    stopActiveAnimation(container);
+    return;
+  }
+
   let effectiveDelta = delta;
   let nextChainCount = 0;
 
@@ -372,6 +384,16 @@ export function scrollDown(
   const velocityMultiplier = opts.maxVelocityMultiplier ?? 2.2;
 
   const existing = activeAnimations.get(container);
+
+  // Reversal brake: If an upward animation is currently active, stop immediately at current position
+  if (existing && existing.delta < 0) {
+    debugLog(
+      `scrollDown: Reversal brake engaged! Upward animation active (delta=${existing.delta}). Stopping at scrollTop=${container.scrollTop}`
+    );
+    stopActiveAnimation(container);
+    return true;
+  }
+
   const currentOrTargetScrollTop = existing ? existing.targetScrollTop : container.scrollTop;
   const clientHeight = container.clientHeight;
   const scrollHeight = container.scrollHeight;
@@ -444,6 +466,16 @@ export function scrollUp(
   const velocityMultiplier = opts.maxVelocityMultiplier ?? 2.2;
 
   const existing = activeAnimations.get(container);
+
+  // Reversal brake: If a downward animation is currently active, stop immediately at current position
+  if (existing && existing.delta > 0) {
+    debugLog(
+      `scrollUp: Reversal brake engaged! Downward animation active (delta=${existing.delta}). Stopping at scrollTop=${container.scrollTop}`
+    );
+    stopActiveAnimation(container);
+    return true;
+  }
+
   const currentOrTargetScrollTop = existing ? existing.targetScrollTop : container.scrollTop;
   const clientHeight = container.clientHeight;
 
