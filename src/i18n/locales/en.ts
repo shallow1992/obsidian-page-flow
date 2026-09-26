@@ -6,6 +6,7 @@ export const en = {
     scrollPageUp: "Scroll page up",
     goToNextFile: "Go to next file in folder",
     goToPrevFile: "Go to previous file in folder",
+    focusFileExplorer: "Focus file explorer (Filer mode)",
   },
   settings: {
     title: "Page Flow Settings",
