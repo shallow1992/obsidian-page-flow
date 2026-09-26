@@ -1,75 +1,35 @@
 import { App, TFile, WorkspaceLeaf } from "obsidian";
 import { debugLog } from "./logger";
 
-export const FILER_SELECTED_CLASS = "page-flow-filer-selected";
-
 /**
- * Pure helper: returns all visible file/folder title elements from the explorer container.
- * Elements that are hidden (e.g. inside collapsed folders or display:none) are excluded.
+ * Helper: finds the currently focused or active file/folder title in the explorer container.
  */
-export function getVisibleExplorerItems(containerEl: HTMLElement): HTMLElement[] {
-  const titles = Array.from(
-    containerEl.querySelectorAll<HTMLElement>(".nav-file-title, .nav-folder-title")
-  );
-  return titles.filter((el) => {
-    // 1. If any ancestor folder is collapsed, it is not visible
-    const folderChildren = el.closest(".nav-folder-children");
-    if (folderChildren) {
-      const parentFolder = folderChildren.closest(".nav-folder");
-      if (parentFolder && parentFolder.classList.contains("is-collapsed")) {
-        return false;
-      }
-    }
-
-    if (el.classList.contains("is-hidden")) return false;
-
-    // 2. In standard browsers / JSDOM, check layout dimensions
-    if (el.offsetParent !== null) return true;
-    if (el.clientHeight > 0 || el.offsetHeight > 0) return true;
-
-    // Fallback for mock environments
-    return true;
-  });
-}
-
-/**
- * Pure helper: finds the parent folder title element of a given file or folder title element.
- */
-export function findParentFolderElement(titleEl: HTMLElement): HTMLElement | null {
-  const childrenContainer = titleEl.closest(".nav-folder-children");
-  if (!childrenContainer) return null;
-
-  const parentFolder = childrenContainer.closest(".nav-folder");
-  if (!parentFolder) return null;
-
-  return parentFolder.querySelector<HTMLElement>(":scope > .nav-folder-title");
-}
-
-/**
- * Pure helper: checks if a title element represents a folder.
- */
-export function isFolderElement(titleEl: HTMLElement): boolean {
-  return titleEl.classList.contains("nav-folder-title");
-}
-
-/**
- * Pure helper: checks if a folder title element belongs to a collapsed folder.
- */
-export function isFolderCollapsed(folderTitleEl: HTMLElement): boolean {
-  const parentFolder = folderTitleEl.closest(".nav-folder");
-  if (parentFolder) {
-    return parentFolder.classList.contains("is-collapsed");
+export function getFocusedOrSelectedExplorerItem(containerEl: HTMLElement): HTMLElement | null {
+  // 1. Current focused element inside container
+  const activeEl = typeof document !== "undefined" ? (document.activeElement as HTMLElement | null) : null;
+  if (activeEl && containerEl.contains(activeEl)) {
+    const item = activeEl.closest<HTMLElement>(".nav-file-title, .nav-folder-title");
+    if (item) return item;
   }
-  return false;
+
+  // 2. Focused selector
+  const focused = containerEl.querySelector<HTMLElement>(
+    ".nav-file-title:focus, .nav-folder-title:focus"
+  );
+  if (focused) return focused;
+
+  // 3. Fallback: currently active file title
+  return containerEl.querySelector<HTMLElement>(".nav-file-title.is-active");
 }
 
 /**
- * Keyboard Filer controller managing state, key events, and selection highlight.
+ * Minimal Keyboard Filer:
+ * Leverages Obsidian's native file explorer navigation and styles,
+ * while intercepting Enter (to prevent rename and open file) and Escape (to restore editor focus).
  */
 export class KeyboardFiler {
   private app: App;
   private isActive = false;
-  private selectedEl: HTMLElement | null = null;
   private keyListener: ((e: KeyboardEvent) => void) | null = null;
   private previousActiveLeaf: WorkspaceLeaf | null = null;
 
@@ -77,15 +37,12 @@ export class KeyboardFiler {
     this.app = app;
   }
 
-  /**
-   * Returns whether the filer mode is currently active.
-   */
   public isFilerActive(): boolean {
     return this.isActive;
   }
 
   /**
-   * Starts keyboard filer mode, focusing the file explorer and selecting current or initial item.
+   * Focuses Obsidian's native file explorer and attaches Enter/Escape interceptors.
    */
   public start(): boolean {
     const explorerLeaf = this.getExplorerLeaf();
@@ -94,70 +51,55 @@ export class KeyboardFiler {
       return false;
     }
 
-    // Save current active leaf to restore focus on exit
+    // Remember editor leaf to restore focus on exit
     this.previousActiveLeaf = this.app.workspace.activeLeaf;
 
-    // Ensure left sidebar is expanded if collapsed
+    // Expand left sidebar if collapsed
     const leftSplit = this.app.workspace.leftSplit as { collapsed?: boolean; expand?: () => void } | undefined;
-    if (leftSplit && leftSplit.collapsed && typeof leftSplit.expand === "function") {
+    if (leftSplit?.collapsed && typeof leftSplit.expand === "function") {
       leftSplit.expand();
     }
 
-    // Reveal explorer leaf
+    // Activate and focus file explorer leaf
     this.app.workspace.revealLeaf(explorerLeaf);
+    this.app.workspace.setActiveLeaf(explorerLeaf, { focus: true });
 
     const containerEl = explorerLeaf.view?.containerEl;
     if (!containerEl) {
-      debugLog("KeyboardFiler: Explorer view containerEl not found.");
+      debugLog("KeyboardFiler: Explorer containerEl not found.");
       return false;
     }
 
-    // Safely trigger Obsidian's internal reveal-active-file command
+    // Reveal active file in explorer tree
     try {
       const customApp = this.app as unknown as {
         commands?: { executeCommandById?: (id: string) => void };
       };
       customApp.commands?.executeCommandById?.("file-explorer:reveal-active-file");
     } catch {
-      // Ignore if not supported
+      // Ignore
     }
 
-    // Find initial element to select
-    const activeFile = this.app.workspace.getActiveFile();
-    let initialEl: HTMLElement | null = null;
-
-    if (activeFile) {
-      const safePath =
-        typeof CSS !== "undefined" && typeof CSS.escape === "function"
-          ? CSS.escape(activeFile.path)
-          : activeFile.path.replace(/["\\]/g, "\\$&");
-      initialEl = containerEl.querySelector<HTMLElement>(
-        `.nav-file-title[data-path="${safePath}"]`
-      );
-    }
-
-    const visibleItems = getVisibleExplorerItems(containerEl);
-    if (!initialEl && visibleItems.length > 0) {
-      initialEl = visibleItems[0];
-    }
-
-    if (initialEl) {
-      this.selectElement(initialEl);
+    // Set browser focus to the active or initial item
+    const activeItem =
+      containerEl.querySelector<HTMLElement>(".nav-file-title.is-active") ||
+      containerEl.querySelector<HTMLElement>(".nav-file-title, .nav-folder-title");
+    if (activeItem && typeof activeItem.focus === "function") {
+      activeItem.focus();
     }
 
     this.isActive = true;
     this.registerKeyListener(containerEl);
-    debugLog("KeyboardFiler: Started filer mode.");
+    debugLog("KeyboardFiler: Started native overlap mode.");
     return true;
   }
 
   /**
-   * Stops keyboard filer mode, removes selection highlight, and restores editor focus.
+   * Exits filer mode and restores editor focus.
    */
   public stop(restoreFocus = true): void {
     if (!this.isActive) return;
 
-    this.removeSelection();
     this.unregisterKeyListener();
     this.isActive = false;
 
@@ -165,7 +107,7 @@ export class KeyboardFiler {
       try {
         this.app.workspace.setActiveLeaf(this.previousActiveLeaf, { focus: true });
       } catch {
-        // Fallback: ignore focus errors
+        // Ignore
       }
     }
 
@@ -174,132 +116,70 @@ export class KeyboardFiler {
   }
 
   /**
-   * Selects and highlights a specific item element.
-   */
-  public selectElement(el: HTMLElement): void {
-    if (this.selectedEl && this.selectedEl !== el) {
-      this.selectedEl.classList.remove(FILER_SELECTED_CLASS);
-    }
-    this.selectedEl = el;
-    this.selectedEl.classList.add(FILER_SELECTED_CLASS);
-
-    try {
-      this.selectedEl.scrollIntoView({ block: "nearest", inline: "nearest" });
-    } catch {
-      // Fallback in environments without scrollIntoView
-    }
-  }
-
-  /**
-   * Handles keyboard events for navigation.
+   * Handles keyboard interception for Enter and Escape.
    */
   public handleKey(e: KeyboardEvent, containerEl: HTMLElement): boolean {
     if (!this.isActive) return false;
 
-    const visibleItems = getVisibleExplorerItems(containerEl);
-    if (visibleItems.length === 0) return false;
+    if (e.key === "Enter") {
+      // Intercept Enter: prevent rename trigger completely
+      e.preventDefault();
+      e.stopImmediatePropagation();
 
-    const currentIndex = this.selectedEl ? visibleItems.indexOf(this.selectedEl) : -1;
-
-    switch (e.key) {
-      case "ArrowDown": {
-        e.preventDefault();
-        e.stopPropagation();
-        const nextIndex = currentIndex < 0 ? 0 : Math.min(visibleItems.length - 1, currentIndex + 1);
-        this.selectElement(visibleItems[nextIndex]);
-        return true;
-      }
-
-      case "ArrowUp": {
-        e.preventDefault();
-        e.stopPropagation();
-        const prevIndex = currentIndex < 0 ? 0 : Math.max(0, currentIndex - 1);
-        this.selectElement(visibleItems[prevIndex]);
-        return true;
-      }
-
-      case "ArrowRight": {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!this.selectedEl) return false;
-
-        if (isFolderElement(this.selectedEl)) {
-          if (isFolderCollapsed(this.selectedEl)) {
-            // Expand collapsed folder
-            this.selectedEl.click();
-          } else {
-            // Already expanded: move to first child if available
-            if (currentIndex >= 0 && currentIndex + 1 < visibleItems.length) {
-              this.selectElement(visibleItems[currentIndex + 1]);
-            }
-          }
-        }
-        return true;
-      }
-
-      case "ArrowLeft": {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!this.selectedEl) return false;
-
-        if (isFolderElement(this.selectedEl) && !isFolderCollapsed(this.selectedEl)) {
-          // Collapse expanded folder
-          this.selectedEl.click();
-        } else {
-          // Find parent folder and select it
-          const parentFolderEl = findParentFolderElement(this.selectedEl);
-          if (parentFolderEl) {
-            this.selectElement(parentFolderEl);
-          }
-        }
-        return true;
-      }
-
-      case "Enter": {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!this.selectedEl) return false;
-
-        if (isFolderElement(this.selectedEl)) {
-          // Toggle folder collapsed state
-          this.selectedEl.click();
-        } else {
-          // Open selected file and exit filer mode
-          const path = this.selectedEl.getAttribute("data-path");
-          if (path) {
-            const file = this.app.vault.getAbstractFileByPath(path);
-            if (file instanceof TFile) {
-              void this.app.workspace.getLeaf(false).openFile(file).then(() => {
-                this.stop(true);
-              });
-              return true;
-            }
-          }
-          this.stop(true);
-        }
-        return true;
-      }
-
-      case "Escape": {
-        e.preventDefault();
-        e.stopPropagation();
+      const item = getFocusedOrSelectedExplorerItem(containerEl);
+      if (!item) {
         this.stop(true);
         return true;
       }
 
-      default:
-        return false;
+      // If it's a file, open it and restore focus to editor
+      if (item.classList.contains("nav-file-title")) {
+        const path = item.getAttribute("data-path");
+        if (path) {
+          const file = this.app.vault.getAbstractFileByPath(path);
+          if (file instanceof TFile) {
+            void this.app.workspace.getLeaf(false).openFile(file).then(() => {
+              this.stop(true);
+            });
+            return true;
+          }
+        }
+        this.stop(true);
+        return true;
+      }
+
+      // If it's a folder, toggle collapse safely without renaming
+      if (item.classList.contains("nav-folder-title")) {
+        const indicator = item.querySelector<HTMLElement>(".nav-folder-collapse-indicator");
+        if (indicator && typeof indicator.click === "function") {
+          indicator.click();
+        } else {
+          item.click();
+        }
+        return true;
+      }
+
+      return true;
     }
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      this.stop(true);
+      return true;
+    }
+
+    return false;
   }
 
   private registerKeyListener(containerEl: HTMLElement): void {
     this.unregisterKeyListener();
 
     this.keyListener = (e: KeyboardEvent) => {
+      // Intercept only when inside file explorer
       this.handleKey(e, containerEl);
     };
 
-    // Use capture phase to intercept navigation keys before other handlers
     window.addEventListener("keydown", this.keyListener, true);
   }
 
@@ -307,13 +187,6 @@ export class KeyboardFiler {
     if (this.keyListener) {
       window.removeEventListener("keydown", this.keyListener, true);
       this.keyListener = null;
-    }
-  }
-
-  private removeSelection(): void {
-    if (this.selectedEl) {
-      this.selectedEl.classList.remove(FILER_SELECTED_CLASS);
-      this.selectedEl = null;
     }
   }
 

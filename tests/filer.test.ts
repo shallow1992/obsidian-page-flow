@@ -1,12 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  FILER_SELECTED_CLASS,
-  findParentFolderElement,
-  getVisibleExplorerItems,
-  isFolderCollapsed,
-  isFolderElement,
-  KeyboardFiler,
-} from "../src/filer";
+import { getFocusedOrSelectedExplorerItem, KeyboardFiler } from "../src/filer";
 import { App, TFile } from "obsidian";
 
 class MockClassList {
@@ -29,29 +22,20 @@ class MockClassList {
 }
 
 class MockDomNode {
-  tagName: string;
   classList: MockClassList;
   attributes: Map<string, string>;
   parentElement: MockDomNode | null = null;
   children: MockDomNode[] = [];
-  offsetParent: MockDomNode | null = null;
-  clientHeight = 20;
-  offsetHeight = 20;
   clicked = false;
-  clickHandlers: (() => void)[] = [];
+  focused = false;
 
-  constructor(tagName: string, classNames: string[] = [], attrs: Record<string, string> = {}) {
-    this.tagName = tagName.toUpperCase();
+  constructor(classNames: string[] = [], attrs: Record<string, string> = {}) {
     this.classList = new MockClassList(classNames);
     this.attributes = new Map(Object.entries(attrs));
   }
 
   getAttribute(name: string): string | null {
     return this.attributes.get(name) ?? null;
-  }
-
-  setAttribute(name: string, value: string): void {
-    this.attributes.set(name, value);
   }
 
   appendChild<T extends MockDomNode>(child: T): T {
@@ -62,19 +46,30 @@ class MockDomNode {
 
   click(): void {
     this.clicked = true;
-    for (const h of this.clickHandlers) {
-      h();
-    }
   }
 
-  scrollIntoView = vi.fn();
+  focus(): void {
+    this.focused = true;
+  }
+
+  contains(child: MockDomNode): boolean {
+    let curr: MockDomNode | null = child;
+    while (curr) {
+      if (curr === this) return true;
+      curr = curr.parentElement;
+    }
+    return false;
+  }
 
   closest(selector: string): MockDomNode | null {
     let curr: MockDomNode | null = this;
-    const cleanSel = selector.replace(/^\./, "");
+    const subSelectors = selector.split(",").map((s) => s.trim());
     while (curr) {
-      if (curr.classList.contains(cleanSel)) {
-        return curr;
+      for (const sub of subSelectors) {
+        const classes = sub.split(".").filter(Boolean);
+        if (classes.length > 0 && classes.every((c) => curr!.classList.has(c))) {
+          return curr;
+        }
       }
       curr = curr.parentElement;
     }
@@ -82,377 +77,223 @@ class MockDomNode {
   }
 
   querySelector<T extends MockDomNode>(selector: string): T | null {
-    const all = this.querySelectorAll<T>(selector);
-    return all.length > 0 ? all[0] : null;
-  }
-
-  querySelectorAll<T extends MockDomNode>(selector: string): T[] {
-    const results: T[] = [];
-    const selectors = selector.split(",").map((s) => s.trim());
-
-    if (selectors.length === 1 && selectors[0] === ":scope > .nav-folder-title") {
-      for (const child of this.children) {
-        if (child.classList.contains("nav-folder-title")) {
-          results.push(child as unknown as T);
+    const subSelectors = selector.split(",").map((s) => s.trim());
+    const matchesNode = (node: MockDomNode): boolean => {
+      for (const sub of subSelectors) {
+        const cleanSub = sub.replace(/:focus/g, "");
+        const classes = cleanSub.split(".").filter(Boolean);
+        if (classes.length > 0 && classes.every((c) => node.classList.has(c))) {
+          return true;
         }
       }
-      return results;
-    }
-
-    const matches = (node: MockDomNode, sel: string): boolean => {
-      // Attribute selector like .nav-file-title[data-path="Folder1/File2.md"]
-      const attrMatch = sel.match(/^(\.[a-zA-Z0-9_-]+)?\[([a-zA-Z0-9_-]+)="([^"]+)"\]$/);
-      if (attrMatch) {
-        const [, className, attrName, attrVal] = attrMatch;
-        if (className && !node.classList.contains(className.replace(/^\./, ""))) {
-          return false;
-        }
-        return node.getAttribute(attrName) === attrVal;
-      }
-
-      const className = sel.replace(/^\./, "");
-      return node.classList.contains(className);
+      return false;
     };
 
-    const traverse = (node: MockDomNode) => {
-      for (const sel of selectors) {
-        if (matches(node, sel)) {
-          results.push(node as unknown as T);
-        }
+    const traverse = (node: MockDomNode): MockDomNode | null => {
+      if (matchesNode(node)) return node;
+      for (const c of node.children) {
+        const found = traverse(c);
+        if (found) return found;
       }
-
-      for (const child of node.children) {
-        traverse(child);
-      }
+      return null;
     };
 
-    for (const child of this.children) {
-      traverse(child);
+    for (const c of this.children) {
+      const found = traverse(c);
+      if (found) return found as unknown as T;
     }
-
-    return results;
+    return null;
   }
 }
 
-function createExplorerTree(): {
-  root: MockDomNode;
-  folder1: MockDomNode;
-  folder1Title: MockDomNode;
-  folder1Children: MockDomNode;
-  file1: MockDomNode;
-  file1Title: MockDomNode;
-  file2: MockDomNode;
-  file2Title: MockDomNode;
-  folder2: MockDomNode;
-  folder2Title: MockDomNode;
-  folder2Children: MockDomNode;
-  file3: MockDomNode;
-  file3Title: MockDomNode;
-} {
-  const root = new MockDomNode("div", ["nav-files-container"]);
+describe("Minimal KeyboardFiler (Native Overlap)", () => {
+  let app: App;
+  let originalWindow: typeof global.window;
+  let originalDocument: typeof global.document;
+  let windowListeners: Record<string, ((e: any) => void)[]> = {};
 
-  // Folder 1 (expanded)
-  const folder1 = new MockDomNode("div", ["nav-folder"]);
-  const folder1Title = new MockDomNode("div", ["nav-folder-title"], { "data-path": "Folder1" });
-  folder1.appendChild(folder1Title);
+  beforeEach(() => {
+    app = new App();
+    windowListeners = {};
+    originalWindow = global.window;
+    originalDocument = global.document;
 
-  const folder1Children = new MockDomNode("div", ["nav-folder-children"]);
-  const file1 = new MockDomNode("div", ["nav-file"]);
-  const file1Title = new MockDomNode("div", ["nav-file-title"], { "data-path": "Folder1/File1.md" });
-  file1.appendChild(file1Title);
-  folder1Children.appendChild(file1);
+    (global as unknown as { window: unknown }).window = {
+      addEventListener: (event: string, handler: (e: any) => void) => {
+        if (!windowListeners[event]) windowListeners[event] = [];
+        windowListeners[event].push(handler);
+      },
+      removeEventListener: (event: string, handler: (e: any) => void) => {
+        if (windowListeners[event]) {
+          windowListeners[event] = windowListeners[event].filter((h) => h !== handler);
+        }
+      },
+    };
+  });
 
-  const file2 = new MockDomNode("div", ["nav-file"]);
-  const file2Title = new MockDomNode("div", ["nav-file-title"], { "data-path": "Folder1/File2.md" });
-  file2.appendChild(file2Title);
-  folder1Children.appendChild(file2);
+  afterEach(() => {
+    (global as unknown as { window: unknown }).window = originalWindow;
+    (global as unknown as { document: unknown }).document = originalDocument;
+  });
 
-  folder1.appendChild(folder1Children);
-  root.appendChild(folder1);
+  describe("getFocusedOrSelectedExplorerItem", () => {
+    it("returns focused element inside container if present", () => {
+      const container = new MockDomNode(["nav-files-container"]);
+      const fileTitle = new MockDomNode(["nav-file-title"]);
+      container.appendChild(fileTitle);
 
-  // Folder 2 (collapsed)
-  const folder2 = new MockDomNode("div", ["nav-folder", "is-collapsed"]);
-  const folder2Title = new MockDomNode("div", ["nav-folder-title"], { "data-path": "Folder2" });
-  folder2.appendChild(folder2Title);
+      (global as unknown as { document: unknown }).document = {
+        activeElement: fileTitle,
+      };
 
-  const folder2Children = new MockDomNode("div", ["nav-folder-children"]);
-  const file3 = new MockDomNode("div", ["nav-file"]);
-  const file3Title = new MockDomNode("div", ["nav-file-title"], { "data-path": "Folder2/File3.md" });
-  file3.appendChild(file3Title);
-  folder2Children.appendChild(file3);
-
-  folder2.appendChild(folder2Children);
-  root.appendChild(folder2);
-
-  return {
-    root,
-    folder1,
-    folder1Title,
-    folder1Children,
-    file1,
-    file1Title,
-    file2,
-    file2Title,
-    folder2,
-    folder2Title,
-    folder2Children,
-    file3,
-    file3Title,
-  };
-}
-
-describe("Keyboard Filer logic", () => {
-  describe("DOM Tree helpers", () => {
-    it("getVisibleExplorerItems excludes items inside collapsed folders", () => {
-      const tree = createExplorerTree();
-      const visible = getVisibleExplorerItems(tree.root as unknown as HTMLElement);
-
-      expect(visible).toHaveLength(4);
-      expect(visible[0]).toBe(tree.folder1Title);
-      expect(visible[1]).toBe(tree.file1Title);
-      expect(visible[2]).toBe(tree.file2Title);
-      expect(visible[3]).toBe(tree.folder2Title);
-      // File3 inside collapsed Folder2 must be excluded
-      expect(visible).not.toContain(tree.file3Title);
+      const result = getFocusedOrSelectedExplorerItem(container as unknown as HTMLElement);
+      expect(result).toBe(fileTitle);
     });
 
-    it("findParentFolderElement correctly resolves parent folder title", () => {
-      const tree = createExplorerTree();
+    it("falls back to .is-active file title when no element is focused", () => {
+      const container = new MockDomNode(["nav-files-container"]);
+      const activeTitle = new MockDomNode(["nav-file-title", "is-active"]);
+      container.appendChild(activeTitle);
 
-      // Child file inside Folder1
-      const parent = findParentFolderElement(tree.file1Title as unknown as HTMLElement);
-      expect(parent).toBe(tree.folder1Title);
+      (global as unknown as { document: unknown }).document = {
+        activeElement: null,
+      };
 
-      // Root level folder title has no parent folder
-      const rootFolderParent = findParentFolderElement(tree.folder1Title as unknown as HTMLElement);
-      expect(rootFolderParent).toBeNull();
-    });
-
-    it("isFolderElement identifies folders vs files", () => {
-      const tree = createExplorerTree();
-      expect(isFolderElement(tree.folder1Title as unknown as HTMLElement)).toBe(true);
-      expect(isFolderElement(tree.file1Title as unknown as HTMLElement)).toBe(false);
-    });
-
-    it("isFolderCollapsed identifies collapsed status", () => {
-      const tree = createExplorerTree();
-      expect(isFolderCollapsed(tree.folder1Title as unknown as HTMLElement)).toBe(false);
-      expect(isFolderCollapsed(tree.folder2Title as unknown as HTMLElement)).toBe(true);
+      const result = getFocusedOrSelectedExplorerItem(container as unknown as HTMLElement);
+      expect(result).toBe(activeTitle);
     });
   });
 
-  describe("KeyboardFiler controller", () => {
-    let app: App;
-    let originalWindow: typeof global.window;
-    let windowListeners: Record<string, ((e: any) => void)[]> = {};
-
-    beforeEach(() => {
-      app = new App();
-      windowListeners = {};
-      originalWindow = global.window;
-
-      (global as unknown as { window: unknown }).window = {
-        addEventListener: (event: string, handler: (e: any) => void) => {
-          if (!windowListeners[event]) windowListeners[event] = [];
-          windowListeners[event].push(handler);
-        },
-        removeEventListener: (event: string, handler: (e: any) => void) => {
-          if (windowListeners[event]) {
-            windowListeners[event] = windowListeners[event].filter((h) => h !== handler);
-          }
-        },
-      };
-    });
-
-    afterEach(() => {
-      (global as unknown as { window: unknown }).window = originalWindow;
-    });
-
-    it("starts filer mode and selects active file if present", () => {
-      const tree = createExplorerTree();
+  describe("KeyboardFiler lifecycle and key interception", () => {
+    it("activates leaf and focuses item on start", () => {
       const filer = new KeyboardFiler(app);
+      const container = new MockDomNode(["nav-files-container"]);
+      const activeTitle = new MockDomNode(["nav-file-title", "is-active"]);
+      container.appendChild(activeTitle);
 
       const mockLeaf = {
-        view: {
-          containerEl: tree.root as unknown as HTMLElement,
-        },
+        view: { containerEl: container as unknown as HTMLElement },
       };
-
       app.workspace.getLeavesOfType = vi.fn().mockReturnValue([mockLeaf]);
-      const mockFile = new TFile();
-      mockFile.path = "Folder1/File2.md";
-      app.workspace.getActiveFile = vi.fn().mockReturnValue(mockFile);
 
       const started = filer.start();
       expect(started).toBe(true);
       expect(filer.isFilerActive()).toBe(true);
-
-      // File2 must be selected
-      expect(tree.file2Title.classList.has(FILER_SELECTED_CLASS)).toBe(true);
-      expect(tree.file2Title.scrollIntoView).toHaveBeenCalled();
+      expect(app.workspace.setActiveLeaf).toHaveBeenCalledWith(mockLeaf, { focus: true });
+      expect(activeTitle.focused).toBe(true);
 
       filer.stop(false);
       expect(filer.isFilerActive()).toBe(false);
-      expect(tree.file2Title.classList.has(FILER_SELECTED_CLASS)).toBe(false);
     });
 
-    it("handles ArrowDown and ArrowUp navigation", () => {
-      const tree = createExplorerTree();
+    it("intercepts Enter on file to open it and stop filer, blocking default rename", async () => {
       const filer = new KeyboardFiler(app);
+      const container = new MockDomNode(["nav-files-container"]);
+      const fileTitle = new MockDomNode(["nav-file-title"], { "data-path": "Notes/Test.md" });
+      container.appendChild(fileTitle);
 
-      const mockLeaf = {
-        view: {
-          containerEl: tree.root as unknown as HTMLElement,
-        },
+      (global as unknown as { document: unknown }).document = {
+        activeElement: fileTitle,
       };
-      app.workspace.getLeavesOfType = vi.fn().mockReturnValue([mockLeaf]);
-      app.workspace.getActiveFile = vi.fn().mockReturnValue(null);
 
-      filer.start();
-
-      // Initially selected is Folder1Title (index 0)
-      expect(tree.folder1Title.classList.has(FILER_SELECTED_CLASS)).toBe(true);
-
-      const createKeyEvent = (key: string) =>
-        ({
-          key,
-          preventDefault: vi.fn(),
-          stopPropagation: vi.fn(),
-        } as unknown as KeyboardEvent);
-
-      // Move Down -> File1
-      filer.handleKey(createKeyEvent("ArrowDown"), tree.root as unknown as HTMLElement);
-      expect(tree.file1Title.classList.has(FILER_SELECTED_CLASS)).toBe(true);
-      expect(tree.folder1Title.classList.has(FILER_SELECTED_CLASS)).toBe(false);
-
-      // Move Down -> File2
-      filer.handleKey(createKeyEvent("ArrowDown"), tree.root as unknown as HTMLElement);
-      expect(tree.file2Title.classList.has(FILER_SELECTED_CLASS)).toBe(true);
-
-      // Move Up -> File1
-      filer.handleKey(createKeyEvent("ArrowUp"), tree.root as unknown as HTMLElement);
-      expect(tree.file1Title.classList.has(FILER_SELECTED_CLASS)).toBe(true);
-
-      filer.stop(false);
-    });
-
-    it("handles ArrowRight to expand folder or move into children", () => {
-      const tree = createExplorerTree();
-      const filer = new KeyboardFiler(app);
-
-      const mockLeaf = {
-        view: {
-          containerEl: tree.root as unknown as HTMLElement,
-        },
-      };
-      app.workspace.getLeavesOfType = vi.fn().mockReturnValue([mockLeaf]);
-
-      filer.start();
-      // Currently on Folder1 (expanded). ArrowRight moves to first child (File1).
-      filer.handleKey(
-        { key: "ArrowRight", preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as KeyboardEvent,
-        tree.root as unknown as HTMLElement
-      );
-      expect(tree.file1Title.classList.has(FILER_SELECTED_CLASS)).toBe(true);
-
-      // Now select Folder2 (collapsed). ArrowRight should trigger click to expand.
-      filer.selectElement(tree.folder2Title as unknown as HTMLElement);
-      expect(tree.folder2Title.clicked).toBe(false);
-
-      filer.handleKey(
-        { key: "ArrowRight", preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as KeyboardEvent,
-        tree.root as unknown as HTMLElement
-      );
-      expect(tree.folder2Title.clicked).toBe(true);
-
-      filer.stop(false);
-    });
-
-    it("handles ArrowLeft to collapse folder or jump to parent folder", () => {
-      const tree = createExplorerTree();
-      const filer = new KeyboardFiler(app);
-
-      const mockLeaf = {
-        view: {
-          containerEl: tree.root as unknown as HTMLElement,
-        },
-      };
-      app.workspace.getLeavesOfType = vi.fn().mockReturnValue([mockLeaf]);
-
-      filer.start();
-
-      // Select child File1. ArrowLeft should jump to parent Folder1.
-      filer.selectElement(tree.file1Title as unknown as HTMLElement);
-      filer.handleKey(
-        { key: "ArrowLeft", preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as KeyboardEvent,
-        tree.root as unknown as HTMLElement
-      );
-      expect(tree.folder1Title.classList.has(FILER_SELECTED_CLASS)).toBe(true);
-
-      // Now on Folder1 (expanded). ArrowLeft should click to collapse.
-      expect(tree.folder1Title.clicked).toBe(false);
-      filer.handleKey(
-        { key: "ArrowLeft", preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as KeyboardEvent,
-        tree.root as unknown as HTMLElement
-      );
-      expect(tree.folder1Title.clicked).toBe(true);
-
-      filer.stop(false);
-    });
-
-    it("handles Enter on file to open it and stop filer", async () => {
-      const tree = createExplorerTree();
-      const filer = new KeyboardFiler(app);
-
-      const mockLeaf = {
-        view: {
-          containerEl: tree.root as unknown as HTMLElement,
-        },
-      };
+      const mockLeaf = { view: { containerEl: container as unknown as HTMLElement } };
       app.workspace.getLeavesOfType = vi.fn().mockReturnValue([mockLeaf]);
 
       const testFile = new TFile();
-      testFile.path = "Folder1/File1.md";
+      testFile.path = "Notes/Test.md";
       app.vault.getAbstractFileByPath = vi.fn().mockReturnValue(testFile);
 
       const openFileMock = vi.fn().mockResolvedValue(undefined);
       app.workspace.getLeaf = vi.fn().mockReturnValue({ openFile: openFileMock });
 
       filer.start();
-      filer.selectElement(tree.file1Title as unknown as HTMLElement);
 
-      filer.handleKey(
-        { key: "Enter", preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as KeyboardEvent,
-        tree.root as unknown as HTMLElement
-      );
+      const enterEvent = {
+        key: "Enter",
+        preventDefault: vi.fn(),
+        stopImmediatePropagation: vi.fn(),
+      } as unknown as KeyboardEvent;
 
+      const handled = filer.handleKey(enterEvent, container as unknown as HTMLElement);
+      expect(handled).toBe(true);
+      expect(enterEvent.preventDefault).toHaveBeenCalled();
+      expect(enterEvent.stopImmediatePropagation).toHaveBeenCalled();
       expect(openFileMock).toHaveBeenCalledWith(testFile);
-      // Filer should stop after opening
+
       await Promise.resolve();
       expect(filer.isFilerActive()).toBe(false);
     });
 
-    it("handles Escape to exit filer mode and restore focus", () => {
-      const tree = createExplorerTree();
+    it("intercepts Enter on folder to toggle collapse safely without renaming", () => {
       const filer = new KeyboardFiler(app);
+      const container = new MockDomNode(["nav-files-container"]);
+      const folderTitle = new MockDomNode(["nav-folder-title"]);
+      const indicator = new MockDomNode(["nav-folder-collapse-indicator"]);
+      folderTitle.appendChild(indicator);
+      container.appendChild(folderTitle);
 
-      const mockLeaf = {
-        view: {
-          containerEl: tree.root as unknown as HTMLElement,
-        },
+      (global as unknown as { document: unknown }).document = {
+        activeElement: folderTitle,
       };
+
+      const mockLeaf = { view: { containerEl: container as unknown as HTMLElement } };
+      app.workspace.getLeavesOfType = vi.fn().mockReturnValue([mockLeaf]);
+
+      filer.start();
+
+      const enterEvent = {
+        key: "Enter",
+        preventDefault: vi.fn(),
+        stopImmediatePropagation: vi.fn(),
+      } as unknown as KeyboardEvent;
+
+      const handled = filer.handleKey(enterEvent, container as unknown as HTMLElement);
+      expect(handled).toBe(true);
+      expect(enterEvent.preventDefault).toHaveBeenCalled();
+      expect(enterEvent.stopImmediatePropagation).toHaveBeenCalled();
+      expect(indicator.clicked).toBe(true);
+    });
+
+    it("intercepts Escape to exit filer mode and restore editor focus", () => {
+      const filer = new KeyboardFiler(app);
+      const container = new MockDomNode(["nav-files-container"]);
+      const mockLeaf = { view: { containerEl: container as unknown as HTMLElement } };
       app.workspace.getLeavesOfType = vi.fn().mockReturnValue([mockLeaf]);
 
       filer.start();
       expect(filer.isFilerActive()).toBe(true);
 
-      filer.handleKey(
-        { key: "Escape", preventDefault: vi.fn(), stopPropagation: vi.fn() } as unknown as KeyboardEvent,
-        tree.root as unknown as HTMLElement
-      );
+      const escEvent = {
+        key: "Escape",
+        preventDefault: vi.fn(),
+        stopImmediatePropagation: vi.fn(),
+      } as unknown as KeyboardEvent;
 
+      const handled = filer.handleKey(escEvent, container as unknown as HTMLElement);
+      expect(handled).toBe(true);
+      expect(escEvent.preventDefault).toHaveBeenCalled();
+      expect(escEvent.stopImmediatePropagation).toHaveBeenCalled();
       expect(filer.isFilerActive()).toBe(false);
-      expect(tree.folder1Title.classList.has(FILER_SELECTED_CLASS)).toBe(false);
+    });
+
+    it("passes through Arrow keys to let native Obsidian navigation handle them", () => {
+      const filer = new KeyboardFiler(app);
+      const container = new MockDomNode(["nav-files-container"]);
+      const mockLeaf = { view: { containerEl: container as unknown as HTMLElement } };
+      app.workspace.getLeavesOfType = vi.fn().mockReturnValue([mockLeaf]);
+
+      filer.start();
+
+      const arrowDownEvent = {
+        key: "ArrowDown",
+        preventDefault: vi.fn(),
+        stopImmediatePropagation: vi.fn(),
+      } as unknown as KeyboardEvent;
+
+      // Must return false so native Obsidian key navigation processes it!
+      const handled = filer.handleKey(arrowDownEvent, container as unknown as HTMLElement);
+      expect(handled).toBe(false);
+      expect(arrowDownEvent.preventDefault).not.toHaveBeenCalled();
     });
   });
 });
